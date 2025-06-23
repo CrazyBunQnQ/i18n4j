@@ -15,6 +15,7 @@ import hashlib
 from pathlib import Path
 from typing import Set, Dict, List
 import configparser
+import chardet
 
 class JavaStringExtractor:
     def __init__(self):
@@ -50,6 +51,12 @@ class JavaStringExtractor:
         content = self.annotation_pattern.sub('', content)
         return content
     
+    def contains_non_english(self, string_value: str) -> bool:
+        """检查字符串是否包含非英文字符(包括中文、日文、韩文等以及非英文标点符号)"""
+        # 匹配非ASCII字符或非英文标点符号
+        non_english_pattern = re.compile(r'[^\x00-\x7F]|[\u2000-\u206F\u2E00-\u2E7F\u3000-\u303F\uFF00-\uFFEF]')
+        return bool(non_english_pattern.search(string_value))
+    
     def is_valid_string(self, string_value: str) -> bool:
         """判断字符串是否应该被提取"""
         if not string_value or len(string_value.strip()) < 2:
@@ -59,24 +66,52 @@ class JavaStringExtractor:
         for pattern in self.exclude_patterns:
             if re.match(pattern, string_value.strip()):
                 return False
+        
+        # 只提取包含非英文字符的字符串
+        if not self.contains_non_english(string_value):
+            return False
                 
         return True
     
+    def detect_encoding(self, file_path: Path) -> str:
+        """检测文件编码"""
+        try:
+            with open(file_path, 'rb') as f:
+                raw_data = f.read()
+                result = chardet.detect(raw_data)
+                encoding = result.get('encoding', 'utf-8')
+                confidence = result.get('confidence', 0)
+                
+                # 如果置信度太低，使用默认编码
+                if confidence < 0.7:
+                    encoding = 'utf-8'
+                    
+                return encoding
+        except Exception:
+            return 'utf-8'
+    
     def extract_strings_from_file(self, file_path: Path) -> Set[str]:
         """从单个Java文件中提取字符串"""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except UnicodeDecodeError:
-            # 尝试其他编码
+        # 检测文件编码
+        detected_encoding = self.detect_encoding(file_path)
+        
+        # 尝试多种编码读取文件
+        encodings_to_try = [detected_encoding, 'utf-8', 'gbk', 'gb2312', 'latin-1']
+        content = None
+        
+        for encoding in encodings_to_try:
             try:
-                with open(file_path, 'r', encoding='gbk') as f:
+                with open(file_path, 'r', encoding=encoding) as f:
                     content = f.read()
-            except:
-                print(f"警告: 无法读取文件 {file_path}")
+                    break
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+            except Exception as e:
+                print(f"错误: 读取文件 {file_path} 时出错: {e}")
                 return set()
-        except Exception as e:
-            print(f"错误: 读取文件 {file_path} 时出错: {e}")
+        
+        if content is None:
+            print(f"警告: 无法读取文件 {file_path}，尝试了多种编码")
             return set()
         
         # 移除注释

@@ -49,10 +49,13 @@ public class UserController {
     // 单行注释中的 "字符串" 应该被忽略
     private static final String SUCCESS_MESSAGE = "用户操作成功";
     private static final String ERROR_MESSAGE = "操作失败，请重试";
+    private static final String ENGLISH_ONLY = "This is English only text";
+    private static final String MIXED_TEXT = "Welcome 欢迎";
     
     @GetMapping("/login")
     public String login() {
         System.out.println("用户尝试登录");
+        System.out.println("Debug message in English");
         return "登录页面";
     }
     
@@ -68,6 +71,7 @@ public class UserController {
          */
         
         logger.info("新用户注册: " + user.getName());
+        logger.debug("Registration attempt for user");
         return ResponseEntity.ok("注册成功");
     }
     
@@ -79,6 +83,10 @@ public class UserController {
         if (password.length() < 6) {
             throw new IllegalArgumentException("密码长度至少6位");
         }
+        
+        // 这些英文字符串应该被过滤掉
+        String debugMsg = "Password validation failed";
+        String logMsg = "User validation completed";
     }
 }
 '''
@@ -102,6 +110,7 @@ public class UserService {
         }
         
         System.out.println("认证失败");
+        System.out.println("Authentication failed");  // 纯英文，应该被过滤
         return false;
     }
     
@@ -111,14 +120,22 @@ public class UserService {
                 return "活跃用户";
             case 2:
                 return "已禁用";
+            case 3:
+                return "Suspended";  // 纯英文，应该被过滤
             default:
                 return "未知状态";
         }
     }
     
+    public void logMessage() {
+        System.out.println("Processing user data...");  // 纯英文，应该被过滤
+        System.out.println("处理用户数据中...");  // 包含中文，应该被提取
+        System.out.println("Error: 用户不存在");  // 混合文本，应该被提取
+    }
+    
     @Override
     public String toString() {
-        return "UserService{version=1.0}";
+        return "UserService{version=1.0}";  // 纯英文，应该被过滤
     }
 }
 '''
