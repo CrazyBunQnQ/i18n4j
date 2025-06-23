@@ -154,6 +154,21 @@ public class UserService {
         // StringBuffer examples
         StringBuffer buf1 = new StringBuffer().append("系统消息: ").append(message).append(" 已发送");
         StringBuffer buf2 = new StringBuffer().append(status).append("状态更新");
+        
+        // Multi-line string concatenation examples
+        String multiLine1 = "处理开始: " +
+                           processId +
+                           " 状态更新";
+        
+        String multiLine2 = "用户" +
+                           username +
+                           "执行操作" +
+                           operation +
+                           "成功";
+        
+        String multiLine3 = "错误信息: " +
+                           errorMessage +
+                           " 请联系管理员";
     }
     
     private String getErrorCode() {

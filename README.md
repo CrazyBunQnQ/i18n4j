@@ -113,6 +113,15 @@ password_incorrect = 密码错误
 - `builder.append("字符串").append(变量).append("字符串")` → `"字符串{}字符串"`
 - `new StringBuffer().append("字符串").append(变量)` → `"字符串{}"`
 
+#### 多行字符串拼接
+- 跨多行的字符串拼接模式：
+```java
+String message = "处理开始: " +
+                processId +
+                " 状态更新";
+```
+→ `"处理开始: {}状态更新"`
+
 这确保了完整的i18n配置条目不会被拆分，保持了句子的完整性。
 
 ### 非英文字符检测规则

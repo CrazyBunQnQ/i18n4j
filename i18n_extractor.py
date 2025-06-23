@@ -94,7 +94,10 @@ class JavaStringExtractor:
         """检测字符串拼接模式并生成带占位符的完整句子"""
         detected_strings = {}
         
-        # 简化的拼接模式检测
+        # 处理多行字符串拼接
+        self._detect_multiline_concatenation(content, detected_strings)
+        
+        # 简化的单行拼接模式检测
         concatenation_patterns = [
             # "字符串" + 变量 + "字符串" 模式
             (r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*\+\s*([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*"([^"\\]*(?:\\.[^"\\]*)*)"', 
@@ -153,6 +156,98 @@ class JavaStringExtractor:
                     continue
         
         return detected_strings
+    
+    def _detect_multiline_concatenation(self, content: str, detected_strings: Dict[str, str]):
+        """检测跨多行的字符串拼接模式"""
+        # 匹配多行字符串拼接模式
+        # 例如: "字符串1" +
+        #       变量 +
+        #       "字符串2"
+        multiline_pattern = r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*\+\s*(?:\n\s*([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*)*(?:\n\s*)*"([^"\\]*(?:\\.[^"\\]*)*)"'
+        
+        # 更复杂的多行拼接检测
+        lines = content.split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # 查找以字符串开始且以 + 结尾的行
+            if '"' in line and line.endswith('+'):
+                concatenation_parts = []
+                original_lines = []
+                
+                # 提取第一行的字符串
+                string_match = re.search(r'"([^"\\]*(?:\\.[^"\\]*)*)"', line)
+                if string_match:
+                    concatenation_parts.append(string_match.group(1))
+                    original_lines.append(line)
+                    
+                    # 继续查找后续行
+                    j = i + 1
+                    while j < len(lines):
+                        next_line = lines[j].strip()
+                        if not next_line:
+                            j += 1
+                            continue
+                            
+                        original_lines.append(next_line)
+                        
+                        # 检查是否为变量 + 
+                        var_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*$', next_line)
+                        if var_match:
+                            concatenation_parts.append('{}')
+                            j += 1
+                            continue
+                        
+                        # 检查是否为字符串（可能是最后一行）
+                        string_match = re.search(r'"([^"\\]*(?:\\.[^"\\]*)*)"', next_line)
+                        if string_match:
+                            concatenation_parts.append(string_match.group(1))
+                            # 检查是否还有 + 继续
+                            if not next_line.endswith('+'):
+                                # 拼接结束
+                                break
+                            j += 1
+                            continue
+                        
+                        # 如果不匹配任何模式，结束当前拼接检测
+                        break
+                    
+                    # 如果找到了有效的拼接模式
+                    if len(concatenation_parts) > 1:
+                        # 合并连续的字符串字面量
+                        merged_string = self._merge_concatenation_parts(concatenation_parts)
+                        if merged_string and self.contains_non_english(merged_string):
+                            original_code = '\n'.join(original_lines)
+                            detected_strings[original_code] = merged_string
+                    
+                    i = j
+                else:
+                    i += 1
+            else:
+                i += 1
+    
+    def _merge_concatenation_parts(self, parts: List[str]) -> str:
+        """合并拼接的字符串部分，处理连续的字符串字面量"""
+        if not parts:
+            return ""
+        
+        merged_parts = []
+        i = 0
+        while i < len(parts):
+            if parts[i] == '{}':
+                merged_parts.append('{}')
+                i += 1
+            else:
+                # 收集连续的字符串字面量
+                literal_part = parts[i]
+                i += 1
+                while i < len(parts) and parts[i] != '{}':
+                    literal_part += parts[i]
+                    i += 1
+                merged_parts.append(literal_part)
+        
+        return ''.join(merged_parts)
     
     def _detect_string_builder_patterns(self, content: str, detected_strings: Dict[str, str]):
         """检测 StringBuilder 和 StringBuffer 的字符串拼接模式"""
