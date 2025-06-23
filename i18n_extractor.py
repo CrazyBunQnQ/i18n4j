@@ -90,6 +90,67 @@ class JavaStringExtractor:
         except Exception:
             return 'utf-8'
     
+    def detect_string_concatenation(self, content: str) -> Dict[str, str]:
+        """检测字符串拼接模式并生成带占位符的完整句子"""
+        detected_strings = {}
+        
+        # 简化的拼接模式检测
+        concatenation_patterns = [
+            # "字符串" + 变量 + "字符串" 模式
+            (r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*\+\s*([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*"([^"\\]*(?:\\.[^"\\]*)*)"', 
+             lambda m: f"{m.group(1)}{{}}{m.group(3)}"),
+            
+            # "字符串" + 变量 模式
+            (r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*\+\s*([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)', 
+             lambda m: f"{m.group(1)}{{}}"),
+            
+            # 变量 + "字符串" 模式
+            (r'([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*"([^"\\]*(?:\\.[^"\\]*)*)"', 
+             lambda m: f"{{}}{m.group(2)}"),
+        ]
+        
+        # 按行处理字符串拼接
+        lines = content.split('\n')
+        for line in lines:
+            # 跳过不包含拼接的行
+            if '"' not in line or '+' not in line:
+                continue
+            
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+                
+            # 尝试匹配各种拼接模式
+            for pattern, formatter in concatenation_patterns:
+                matches = re.finditer(pattern, line)
+                for match in matches:
+                    try:
+                        formatted = formatter(match)
+                        # 只保留包含非英文字符的拼接
+                        if self.contains_non_english(formatted):
+                            detected_strings[match.group(0)] = formatted
+                    except:
+                        continue
+        
+        # 处理 String.format 和 MessageFormat.format
+        format_patterns = {
+            r'String\.format\s*\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"[^)]*\)': r'\1',
+            r'MessageFormat\.format\s*\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"[^)]*\)': r'\1',
+        }
+        
+        for pattern, replacement in format_patterns.items():
+            matches = re.finditer(pattern, content, re.MULTILINE)
+            for match in matches:
+                original = match.group(0)
+                try:
+                    formatted = re.sub(pattern, replacement, original)
+                    if self.contains_non_english(formatted):
+                        detected_strings[original] = formatted
+                except:
+                    continue
+        
+        return detected_strings
+    
     def extract_strings_from_file(self, file_path: Path) -> Set[str]:
         """从单个Java文件中提取字符串"""
         # 检测文件编码
@@ -115,17 +176,29 @@ class JavaStringExtractor:
             return set()
         
         # 移除注释
-        content = self.remove_comments(content)
+        cleaned_content = self.remove_comments(content)
         
-        # 提取字符串
+        # 检测字符串拼接模式
+        concatenated_strings = self.detect_string_concatenation(cleaned_content)
+        
+        # 从原内容中移除已检测到的拼接模式，避免重复提取
+        for original_pattern in concatenated_strings.keys():
+            cleaned_content = cleaned_content.replace(original_pattern, '')
+        
+        # 提取普通字符串
         strings = set()
-        matches = self.string_pattern.findall(content)
+        matches = self.string_pattern.findall(cleaned_content)
         
         for match in matches:
             # match[0] 是完整的字符串内容
             string_value = match[0]
             if self.is_valid_string(string_value):
                 strings.add(string_value)
+        
+        # 添加检测到的拼接字符串
+        for formatted_string in concatenated_strings.values():
+            if self.is_valid_string(formatted_string):
+                strings.add(formatted_string)
                 
         return strings
     
@@ -137,7 +210,7 @@ class JavaStringExtractor:
         print(f"找到 {len(java_files)} 个Java文件")
         
         for java_file in java_files:
-            print(f"正在处理: {java_file}")
+            # print(f"正在处理: {java_file}")
             file_strings = self.extract_strings_from_file(java_file)
             all_strings.update(file_strings)
             
@@ -261,7 +334,7 @@ def main():
         if key not in existing_config:
             existing_config[key] = string_value
             new_entries += 1
-            print(f"新增: {key} = {string_value}")
+            # print(f"新增: {key} = {string_value}")
     
     # 保存配置文件
     extractor.save_config(config_path, existing_config)

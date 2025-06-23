@@ -84,6 +84,11 @@ public class UserController {
             throw new IllegalArgumentException("密码长度至少6位");
         }
         
+        // 字符串拼接测试用例
+        String welcomeMsg = "欢迎用户: " + username + "登录系统";
+        logger.info("用户" + username + "验证成功");
+        System.out.println("Hello " + username + " welcome");  // 英文拼接，应该被过滤
+        
         // 这些英文字符串应该被过滤掉
         String debugMsg = "Password validation failed";
         String logMsg = "User validation completed";
@@ -131,6 +136,20 @@ public class UserService {
         System.out.println("Processing user data...");  // 纯英文，应该被过滤
         System.out.println("处理用户数据中...");  // 包含中文，应该被提取
         System.out.println("Error: 用户不存在");  // 混合文本，应该被提取
+        
+        // 字符串拼接测试
+        String userId = "12345";
+        String message1 = "用户ID: " + userId + " 操作成功";
+        String message2 = "错误代码: " + getErrorCode();
+        logger.warn("警告: 用户" + userId + "权限不足");
+        
+        // String.format 测试
+        String formatted1 = String.format("用户%s登录时间: %s", username, loginTime);
+        String formatted2 = String.format("Welcome %s to our system", username);  // 英文格式化，应该被过滤
+    }
+    
+    private String getErrorCode() {
+        return "E001";
     }
     
     @Override
