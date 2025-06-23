@@ -13,7 +13,7 @@ import re
 import argparse
 import hashlib
 from pathlib import Path
-from typing import Set, Dict, List
+from typing import Set, Dict, List, Optional
 import configparser
 import chardet
 
@@ -132,6 +132,9 @@ class JavaStringExtractor:
                     except:
                         continue
         
+        # 处理 StringBuilder 和 StringBuffer 拼接
+        self._detect_string_builder_patterns(content, detected_strings)
+        
         # 处理 String.format 和 MessageFormat.format
         format_patterns = {
             r'String\.format\s*\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"[^)]*\)': r'\1',
@@ -150,6 +153,71 @@ class JavaStringExtractor:
                     continue
         
         return detected_strings
+    
+    def _detect_string_builder_patterns(self, content: str, detected_strings: Dict[str, str]):
+        """检测 StringBuilder 和 StringBuffer 的字符串拼接模式"""
+        # 匹配 StringBuilder/StringBuffer 的 append 链式调用
+        builder_patterns = [
+            # new StringBuilder().append("字符串").append(变量).append("字符串")
+            r'new\s+(?:StringBuilder|StringBuffer)\s*\(\s*\)(?:\.append\s*\([^)]+\))+',
+            # builder.append("字符串").append(变量).append("字符串")
+            r'[a-zA-Z_][a-zA-Z0-9_]*\.append\s*\([^)]+\)(?:\.append\s*\([^)]+\))+',
+        ]
+        
+        for pattern in builder_patterns:
+            matches = re.finditer(pattern, content, re.MULTILINE | re.DOTALL)
+            for match in matches:
+                builder_code = match.group(0)
+                # 提取所有 append 调用中的字符串
+                append_strings = self._extract_append_strings(builder_code)
+                if append_strings:
+                    # 合并为完整字符串，变量用 {} 替代
+                    merged_string = self._merge_append_strings(append_strings)
+                    if merged_string and self.contains_non_english(merged_string):
+                        detected_strings[builder_code] = merged_string
+    
+    def _extract_append_strings(self, builder_code: str) -> List[str]:
+        """从 StringBuilder/StringBuffer 代码中提取字符串和变量"""
+        append_parts = []
+        # 匹配 .append(参数) 调用
+        append_pattern = r'\.append\s*\(([^)]+)\)'
+        matches = re.finditer(append_pattern, builder_code)
+        
+        for match in matches:
+            param = match.group(1).strip()
+            # 检查是否为字符串字面量
+            if param.startswith('"') and param.endswith('"'):
+                # 提取字符串内容（去掉引号）
+                string_content = param[1:-1]
+                append_parts.append(string_content)
+            else:
+                # 变量或表达式，用占位符表示
+                append_parts.append('{}')
+        
+        return append_parts
+    
+    def _merge_append_strings(self, append_parts: List[str]) -> str:
+        """合并 append 的字符串部分，生成完整的模板字符串"""
+        if not append_parts:
+            return ""
+        
+        # 合并连续的字符串字面量
+        merged_parts = []
+        i = 0
+        while i < len(append_parts):
+            if append_parts[i] == '{}':
+                merged_parts.append('{}')
+                i += 1
+            else:
+                # 收集连续的字符串字面量
+                literal_part = append_parts[i]
+                i += 1
+                while i < len(append_parts) and append_parts[i] != '{}':
+                    literal_part += append_parts[i]
+                    i += 1
+                merged_parts.append(literal_part)
+        
+        return ''.join(merged_parts)
     
     def extract_strings_from_file(self, file_path: Path) -> Set[str]:
         """从单个Java文件中提取字符串"""

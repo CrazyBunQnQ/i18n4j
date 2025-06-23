@@ -99,11 +99,19 @@ password_incorrect = 密码错误
 
 工具能够智能识别以下字符串拼接模式，并将其转换为带 `{}` 占位符的完整句子：
 
+#### 基本拼接模式
 - `"字符串" + 变量 + "字符串"` → `"字符串{}字符串"`
 - `"字符串" + 变量` → `"字符串{}"`
 - `变量 + "字符串"` → `"{}字符串"`
+
+#### 格式化方法
 - `String.format("模板字符串", 参数...)` → `"模板字符串"`
 - `MessageFormat.format("模板字符串", 参数...)` → `"模板字符串"`
+
+#### StringBuilder/StringBuffer 链式调用
+- `new StringBuilder().append("字符串").append(变量).append("字符串")` → `"字符串{}字符串"`
+- `builder.append("字符串").append(变量).append("字符串")` → `"字符串{}字符串"`
+- `new StringBuffer().append("字符串").append(变量)` → `"字符串{}"`
 
 这确保了完整的i18n配置条目不会被拆分，保持了句子的完整性。
 

@@ -146,6 +146,14 @@ public class UserService {
         // String.format 测试
         String formatted1 = String.format("用户%s登录时间: %s", username, loginTime);
         String formatted2 = String.format("Welcome %s to our system", username);  // 英文格式化，应该被过滤
+        
+        // StringBuilder examples
+        StringBuilder sb1 = new StringBuilder().append("处理结果: ").append(result).append(" 完成");
+        StringBuilder sb2 = new StringBuilder().append("用户").append(username).append("权限不足");
+        
+        // StringBuffer examples
+        StringBuffer buf1 = new StringBuffer().append("系统消息: ").append(message).append(" 已发送");
+        StringBuffer buf2 = new StringBuffer().append(status).append("状态更新");
     }
     
     private String getErrorCode() {
