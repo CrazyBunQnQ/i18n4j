@@ -390,7 +390,7 @@ class JavaStringExtractor:
         cleaned = re.sub(r'_+', '_', cleaned).strip('_')
         
         # 如果清理后的字符串太短，使用哈希值
-        if len(cleaned) < 3:
+        if len(cleaned) < 2:
             hash_value = hashlib.md5(string_value.encode('utf-8')).hexdigest()[:8]
             return f"str_{hash_value}"
         
