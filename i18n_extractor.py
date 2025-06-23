@@ -14,6 +14,7 @@ import argparse
 import hashlib
 from pathlib import Path
 from typing import Set, Dict, List, Optional
+from collections import OrderedDict
 import configparser
 import chardet
 
@@ -365,9 +366,9 @@ class JavaStringExtractor:
                 
         return strings
     
-    def scan_project(self, project_path: Path) -> Set[str]:
-        """扫描整个Java项目"""
-        all_strings = set()
+    def scan_project(self, project_path: Path) -> List[str]:
+        """扫描整个Java项目，返回按扫描顺序排列的字符串列表"""
+        all_strings = OrderedDict()  # 使用有序字典去重并保持顺序
         java_files = list(project_path.rglob('*.java'))
         
         print(f"找到 {len(java_files)} 个Java文件")
@@ -375,9 +376,12 @@ class JavaStringExtractor:
         for java_file in java_files:
             # print(f"正在处理: {java_file}")
             file_strings = self.extract_strings_from_file(java_file)
-            all_strings.update(file_strings)
+            # 按扫描顺序添加字符串，自动去重
+            for string_value in file_strings:
+                if string_value not in all_strings:
+                    all_strings[string_value] = True
             
-        return all_strings
+        return list(all_strings.keys())
     
     def generate_key(self, string_value: str) -> str:
         """为字符串生成键"""
@@ -396,9 +400,9 @@ class JavaStringExtractor:
             
         return cleaned.lower()
     
-    def load_existing_config(self, config_path: Path) -> Dict[str, str]:
+    def load_existing_config(self, config_path: Path) -> OrderedDict[str, str]:
         """加载现有的配置文件"""
-        config = {}
+        config = OrderedDict()
         
         if not config_path.exists():
             return config
@@ -424,7 +428,7 @@ class JavaStringExtractor:
             
         return config
     
-    def save_config(self, config_path: Path, config: Dict[str, str]):
+    def save_config(self, config_path: Path, config: OrderedDict[str, str]):
         """保存配置文件"""
         # 确保目录存在
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -433,9 +437,8 @@ class JavaStringExtractor:
             if config_path.suffix.lower() == '.properties':
                 # Java properties文件格式
                 with open(config_path, 'w', encoding='utf-8') as f:
-                    f.write("# 自动生成的国际化配置文件\n")
-                    f.write("# Auto-generated i18n configuration file\n\n")
-                    for key, value in sorted(config.items()):
+                    # 保持原有顺序，不进行排序
+                    for key, value in config.items():
                         f.write(f"{key}={value}\n")
             else:
                 # INI文件格式
