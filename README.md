@@ -10,7 +10,7 @@
 4. **非英文字符检测**：只提取包含非英文字符的字符串（中文、日文、韩文等以及非英文标点符号）
 5. **字符编码检测**：自动检测文件编码，支持UTF-8、GBK、GB2312等多种编码
 6. **去重处理**：自动去除重复的字符串，保持首次扫描到的顺序
-7. **键名生成**：为每个字符串生成合适的键名
+7. **键名生成**：为每个字符串生成合适的键名，支持模块前缀
 8. **配置文件合并**：支持与现有配置文件合并，避免覆盖已有配置
 9. **多种格式支持**：支持.properties和.ini格式的配置文件
 10. **字符串拼接检测**：智能识别字符串拼接模式，生成带 `{}` 占位符的完整句子
@@ -134,6 +134,54 @@ String message = "处理开始: " +
 4. **配置文件追加**: 新发现的字符串总是追加到配置文件的末尾
 
 这确保了配置文件中的键值对顺序与代码中字符串的出现顺序保持一致，便于开发者理解和维护。
+
+## 模块前缀功能
+
+工具支持为多模块Maven项目自动生成带模块前缀的键名：
+
+### 模块检测规则
+
+1. **模块识别**: 以包含 `pom.xml` 的目录作为模块
+2. **模块嵌套**: 支持多层模块嵌套，如 `parent-project/user-service/auth-module`
+3. **前缀生成**: 将模块目录名转为小写，用 `.` 连接
+4. **过滤规则**: 自动过滤临时目录名（如 `tmp*`、`temp*`）和过长的目录名
+
+### 示例
+
+**项目结构:**
+```
+parent-project/
+├── pom.xml
+├── user-service/
+│   ├── pom.xml
+│   └── src/main/java/.../UserController.java
+└── order-service/
+    ├── pom.xml
+    ├── payment-module/
+    │   ├── pom.xml
+    │   └── src/main/java/.../PaymentService.java
+    └── src/main/java/.../OrderController.java
+```
+
+**生成的键名:**
+```properties
+# 来自 user-service 模块
+parent-project.user-service.用户创建成功=用户创建成功
+parent-project.user-service.用户id_已创建=用户ID: {} 已创建
+
+# 来自 order-service 模块
+parent-project.order-service.订单创建成功=订单创建成功
+parent-project.order-service.订单号_已生成=订单号: {} 已生成
+
+# 来自 payment-module 嵌套模块
+parent-project.order-service.payment-module.支付处理中=支付处理中
+parent-project.order-service.payment-module.支付金额_元=支付金额: {} 元
+```
+
+### 兼容性
+
+- **单模块项目**: 如果项目根目录直接包含 `pom.xml`，不会添加模块前缀
+- **非Maven项目**: 如果没有找到 `pom.xml`，按普通项目处理，不添加前缀
 
 ### 非英文字符检测规则
 

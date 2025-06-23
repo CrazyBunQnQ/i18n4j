@@ -366,9 +366,9 @@ class JavaStringExtractor:
                 
         return strings
     
-    def scan_project(self, project_path: Path) -> List[str]:
-        """扫描整个Java项目，返回按扫描顺序排列的字符串列表"""
-        all_strings = OrderedDict()  # 使用有序字典去重并保持顺序
+    def scan_project(self, project_path: Path) -> OrderedDict[str, Path]:
+        """扫描整个Java项目，返回字符串到文件路径的有序映射"""
+        all_strings = OrderedDict()  # 字符串 -> 文件路径的映射
         java_files = list(project_path.rglob('*.java'))
         
         print(f"找到 {len(java_files)} 个Java文件")
@@ -376,15 +376,39 @@ class JavaStringExtractor:
         for java_file in java_files:
             # print(f"正在处理: {java_file}")
             file_strings = self.extract_strings_from_file(java_file)
-            # 按扫描顺序添加字符串，自动去重
+            # 按扫描顺序添加字符串，自动去重，保留首次出现的文件路径
             for string_value in file_strings:
                 if string_value not in all_strings:
-                    all_strings[string_value] = True
+                    all_strings[string_value] = java_file
             
-        return list(all_strings.keys())
+        return all_strings
     
-    def generate_key(self, string_value: str) -> str:
-        """为字符串生成键"""
+    def find_module_path(self, file_path: Path) -> List[str]:
+        """查找文件所属的模块路径，返回模块名列表"""
+        modules = []
+        current_path = file_path.parent
+        
+        # 向上查找包含pom.xml的目录
+        while current_path.parent != current_path:  # 避免到达根目录
+            pom_file = current_path / 'pom.xml'
+            if pom_file.exists():
+                module_name = current_path.name.lower()
+                # 过滤掉临时目录名（通常以tmp开头）和其他无意义的目录名
+                if not (module_name.startswith('tmp') or module_name.startswith('temp') or len(module_name) > 20):
+                    modules.insert(0, module_name)
+            current_path = current_path.parent
+            
+        return modules
+    
+    def generate_key(self, string_value: str, file_path: Path = None) -> str:
+        """为字符串生成键，包含模块前缀"""
+        # 生成模块前缀
+        module_prefix = ""
+        if file_path:
+            modules = self.find_module_path(file_path)
+            if modules:
+                module_prefix = ".".join(modules) + "."
+        
         # 清理字符串，移除特殊字符
         cleaned = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff]', '_', string_value)
         cleaned = re.sub(r'_+', '_', cleaned).strip('_')
@@ -392,13 +416,14 @@ class JavaStringExtractor:
         # 如果清理后的字符串太短，使用哈希值
         if len(cleaned) < 2:
             hash_value = hashlib.md5(string_value.encode('utf-8')).hexdigest()[:8]
-            return f"str_{hash_value}"
-        
-        # 限制长度
-        if len(cleaned) > 50:
-            cleaned = cleaned[:47] + "_" + hashlib.md5(string_value.encode('utf-8')).hexdigest()[:3]
+            base_key = f"str_{hash_value}"
+        else:
+            # 限制长度
+            if len(cleaned) > 50:
+                cleaned = cleaned[:47] + "_" + hashlib.md5(string_value.encode('utf-8')).hexdigest()[:3]
+            base_key = cleaned.lower()
             
-        return cleaned.lower()
+        return module_prefix + base_key
     
     def load_existing_config(self, config_path: Path) -> OrderedDict[str, str]:
         """加载现有的配置文件"""
@@ -487,8 +512,8 @@ def main():
     
     # 生成新的键值对
     new_entries = 0
-    for string_value in extracted_strings:
-        key = extractor.generate_key(string_value)
+    for string_value, file_path in extracted_strings.items():
+        key = extractor.generate_key(string_value, file_path)
         
         # 避免键冲突
         original_key = key
