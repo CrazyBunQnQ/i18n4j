@@ -13,6 +13,7 @@ import re
 import argparse
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from typing import Set, Dict, List, Optional
 from collections import OrderedDict
@@ -514,7 +515,18 @@ class JavaStringExtractor:
                     counter += 1
                 return f"{base_full_key}_{counter}"
         
-        # 回退到传统方法
+        # 等待用户输入 y/n 决定是否回退到传统方法
+        choice = input("是否回退到传统方法生成键名？(y/n)：").lower()
+        if choice != 'y':
+            # 停止脚本结束程序
+            print("已停止脚本运行。")
+            # 在退出前保存当前已处理的配置
+            if hasattr(self, '_current_config') and hasattr(self, '_current_config_path'):
+                print("正在保存当前已处理的配置...")
+                self.save_config(self._current_config_path, self._current_config)
+                print("配置已保存。")
+            exit(0)
+        
         # 清理字符串，移除特殊字符
         cleaned = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff]', '_', string_value)
         cleaned = re.sub(r'_+', '_', cleaned).strip('_')
@@ -569,14 +581,20 @@ class JavaStringExtractor:
         return config
     
     def save_config(self, config_path: Path, config: OrderedDict[str, str]):
-        """保存配置文件"""
+        """保存配置文件，包含备份机制"""
         # 确保目录存在
         config_path.parent.mkdir(parents=True, exist_ok=True)
         
+        # 创建临时文件路径
+        temp_path = config_path.with_suffix(f"{config_path.suffix}.tmp")
+        # 创建备份文件路径
+        backup_path = config_path.with_suffix(f"{config_path.suffix}.bak")
+        
         try:
+            # 先写入临时文件
             if config_path.suffix.lower() == '.properties':
                 # Java properties文件格式
-                with open(config_path, 'w', encoding='utf-8') as f:
+                with open(temp_path, 'w', encoding='utf-8') as f:
                     # 保持原有顺序，不进行排序
                     for key, value in config.items():
                         f.write(f"{key}={value}\n")
@@ -584,10 +602,41 @@ class JavaStringExtractor:
                 # INI文件格式
                 parser = configparser.ConfigParser()
                 parser['DEFAULT'] = config
-                with open(config_path, 'w', encoding='utf-8') as f:
+                with open(temp_path, 'w', encoding='utf-8') as f:
                     parser.write(f)
+            
+            # 如果原文件存在，创建备份
+            if config_path.exists():
+                try:
+                    shutil.copy2(config_path, backup_path)
+                except Exception as e:
+                    print(f"警告: 创建备份文件失败: {e}")
+            
+            # 将临时文件重命名为目标文件
+            try:
+                # 在Windows上，如果目标文件存在，需要先删除
+                if config_path.exists():
+                    config_path.unlink()
+                shutil.move(temp_path, config_path)
+            except Exception as e:
+                print(f"错误: 重命名临时文件失败: {e}")
+                # 尝试恢复备份
+                if backup_path.exists():
+                    try:
+                        shutil.copy2(backup_path, config_path)
+                        print("已从备份恢复配置文件")
+                    except Exception:
+                        print("警告: 无法从备份恢复配置文件")
+                raise
+                
         except Exception as e:
             print(f"错误: 保存配置文件时出错: {e}")
+            # 清理临时文件
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except:
+                    pass
             raise
 
 def main():
@@ -628,20 +677,46 @@ def main():
     # 生成新的键值对
     new_entries = 0
     existing_keys = set(existing_config.keys())
+    processed_count = 0
     
-    for string_value, file_path in extracted_strings.items():
-        # 传递已存在的键名集合，确保生成唯一键名
-        key = extractor.generate_key(string_value, file_path, existing_keys)
-        print(f"{key} = {string_value}")
-        
-        # 检查是否有相同值的不同键
-        if key not in existing_config:
-            existing_config[key] = string_value
-            existing_keys.add(key)  # 更新已存在键名集合
-            new_entries += 1
-            # print(f"新增: {key} = {string_value}")
+    # 设置当前配置和路径，用于异常退出时保存
+    extractor._current_config = existing_config
+    extractor._current_config_path = config_path
     
-    # 保存配置文件
+    try:
+        for string_value, file_path in extracted_strings.items():
+            # 传递已存在的键名集合，确保生成唯一键名
+            key = extractor.generate_key(string_value, file_path, existing_keys)
+            print(f"{key} = {string_value}")
+            
+            # 检查是否有相同值的不同键
+            if key not in existing_config:
+                existing_config[key] = string_value
+                existing_keys.add(key)  # 更新已存在键名集合
+                new_entries += 1
+                # print(f"新增: {key} = {string_value}")
+            
+            processed_count += 1
+            
+            # 每100个配置保存一次
+            if processed_count % 100 == 0:
+                print(f"\n已处理 {processed_count} 个字符串，正在保存配置...")
+                extractor.save_config(config_path, existing_config)
+                print(f"配置已保存，继续处理...")
+    
+    except KeyboardInterrupt:
+        print("\n检测到用户中断，正在保存当前进度...")
+        extractor.save_config(config_path, existing_config)
+        print(f"已保存 {processed_count} 个处理结果到配置文件。")
+        return 1
+    except Exception as e:
+        print(f"\n处理过程中发生错误: {e}")
+        print("正在保存当前进度...")
+        extractor.save_config(config_path, existing_config)
+        print(f"已保存 {processed_count} 个处理结果到配置文件。")
+        raise
+    
+    # 最终保存配置文件
     extractor.save_config(config_path, existing_config)
     
     print(f"\n完成! 新增了 {new_entries} 个条目")
