@@ -470,20 +470,29 @@ class JavaStringExtractor:
                 ai_key = re.sub(r'_+', '_', ai_key).strip('_').lower()
                 
                 # if ai_key and len(ai_key) <= 50:
-                if ai_key:
+                if ai_key and len(ai_key) > 0:
                     return ai_key
                 else:
-                    print(f"警告: 生成的AI键名 {ai_key} 不符合要求，已被截断。")
+                    print(f"警告: 【{string_value}】生成的AI键名 `{ai_key}` 不符合要求，已被截断。")
+                    print(f"AI 返回的原始信息: {result['choices'][0]['message']['content']}")
                     
         except Exception as e:
             print(f"AI键名生成失败: {e}")
             
         return None
     
-    def generate_key(self, string_value: str, file_path: Path = None, existing_keys: set = None) -> str:
+    def generate_key(self, string_value: str, file_path: Path = None, existing_keys: set = None, existing_config: dict = None) -> str:
         """为字符串生成键，包含模块前缀"""
         if existing_keys is None:
             existing_keys = set()
+        if existing_config is None:
+            existing_config = {}
+            
+        # 检查键值是否已存在，如果存在则返回现有的键名
+        for existing_key, existing_value in existing_config.items():
+            if existing_value == string_value:
+                print(f"跳过重复键值: {existing_key} = {string_value}")
+                return existing_key
             
         # 生成模块前缀
         module_prefix = ""
@@ -685,11 +694,17 @@ def main():
     
     try:
         for string_value, file_path in extracted_strings.items():
-            # 传递已存在的键名集合，确保生成唯一键名
-            key = extractor.generate_key(string_value, file_path, existing_keys)
+            # 传递已存在的键名集合和配置，确保生成唯一键名和键值
+            key = extractor.generate_key(string_value, file_path, existing_keys, existing_config)
+            
+            # 如果返回的是已存在的键名（重复键值），则跳过处理
+            if key in existing_config and existing_config[key] == string_value:
+                processed_count += 1
+                continue
+            
             print(f"{key} = {string_value}")
             
-            # 检查是否有相同值的不同键
+            # 添加新的键值对
             if key not in existing_config:
                 existing_config[key] = string_value
                 existing_keys.add(key)  # 更新已存在键名集合
