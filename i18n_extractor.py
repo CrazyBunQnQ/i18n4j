@@ -12,14 +12,20 @@ import os
 import re
 import argparse
 import hashlib
+import json
 from pathlib import Path
 from typing import Set, Dict, List, Optional
 from collections import OrderedDict
 import configparser
 import chardet
+import requests
+from dotenv import load_dotenv
 
 class JavaStringExtractor:
     def __init__(self):
+        # 加载环境变量
+        load_dotenv()
+        
         # 匹配Java字符串的正则表达式
         # 匹配双引号字符串，排除转义字符
         self.string_pattern = re.compile(r'"([^"\\]*(\\.[^"\\]*)*)"')
@@ -29,6 +35,11 @@ class JavaStringExtractor:
         self.multi_comment_pattern = re.compile(r'/\*.*?\*/', re.DOTALL)
         # 匹配注解
         self.annotation_pattern = re.compile(r'@\w+\s*\([^)]*\)', re.MULTILINE)
+        
+        # API配置
+        self.api_key = os.getenv('OPENAI_API_KEY')
+        self.api_base_url = os.getenv('OPENAI_API_BASE_URL', 'https://api.openai.com')
+        self.use_ai_key_generation = bool(self.api_key and self.api_base_url)
         
         # 需要排除的字符串模式
         self.exclude_patterns = [
@@ -400,6 +411,62 @@ class JavaStringExtractor:
             
         return modules
     
+    def _generate_ai_key(self, string_value: str) -> str:
+        """使用AI生成简短的键名"""
+        if not self.use_ai_key_generation:
+            return None
+            
+        try:
+            # 构建API请求
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            # 构建提示词
+            prompt = f"""请为以下中文字符串生成一个简短的英文键名，要求：
+1. 使用小写字母和下划线
+2. 长度不超过30个字符
+3. 能够准确表达字符串的含义
+4. 只返回键名，不要其他内容
+
+字符串：{string_value}"""
+            
+            data = {
+                'model': 'qwen2.5:14b',
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt
+                    }
+                ],
+                'max_tokens': 50,
+                'temperature': 0.3
+            }
+            
+            # 发送请求
+            response = requests.post(
+                f'{self.api_base_url}/v1/chat/completions',
+                headers=headers,
+                json=data,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                ai_key = result['choices'][0]['message']['content'].strip()
+                # 清理AI生成的键名
+                ai_key = re.sub(r'[^a-zA-Z0-9_]', '_', ai_key)
+                ai_key = re.sub(r'_+', '_', ai_key).strip('_').lower()
+                
+                if ai_key and len(ai_key) <= 30:
+                    return ai_key
+                    
+        except Exception as e:
+            print(f"AI键名生成失败: {e}")
+            
+        return None
+    
     def generate_key(self, string_value: str, file_path: Path = None) -> str:
         """为字符串生成键，包含模块前缀"""
         # 生成模块前缀
@@ -409,6 +476,12 @@ class JavaStringExtractor:
             if modules:
                 module_prefix = ".".join(modules) + "."
         
+        # 尝试使用AI生成键名
+        ai_key = self._generate_ai_key(string_value)
+        if ai_key:
+            return module_prefix + ai_key
+        
+        # 回退到传统方法
         # 清理字符串，移除特殊字符
         cleaned = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff]', '_', string_value)
         cleaned = re.sub(r'_+', '_', cleaned).strip('_')
@@ -514,6 +587,7 @@ def main():
     new_entries = 0
     for string_value, file_path in extracted_strings.items():
         key = extractor.generate_key(string_value, file_path)
+        print(f"{key} = {string_value}")
         
         # 避免键冲突
         original_key = key

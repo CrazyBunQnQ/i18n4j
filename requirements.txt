@@ -2,6 +2,10 @@
 # 字符编码检测库（必需）
 chardet>=4.0.0
 
+# OpenAI API调用和环境变量支持
+requests>=2.28.0
+python-dotenv>=1.0.0
+
 # 如果需要更高级的功能，可以考虑添加以下依赖：
 # javalang>=0.13.0  # Java代码解析库
 # click>=8.0.0      # 命令行界面库

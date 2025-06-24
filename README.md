@@ -10,7 +10,7 @@
 4. **非英文字符检测**：只提取包含非英文字符的字符串（中文、日文、韩文等以及非英文标点符号）
 5. **字符编码检测**：自动检测文件编码，支持UTF-8、GBK、GB2312等多种编码
 6. **去重处理**：自动去除重复的字符串，保持首次扫描到的顺序
-7. **键名生成**：为每个字符串生成合适的键名，支持模块前缀
+7. **智能键名生成**：支持AI生成简短英文键名，回退到传统方法，包含模块前缀
 8. **配置文件合并**：支持与现有配置文件合并，避免覆盖已有配置
 9. **多种格式支持**：支持.properties和.ini格式的配置文件
 10. **字符串拼接检测**：智能识别字符串拼接模式，生成带 `{}` 占位符的完整句子
@@ -182,6 +182,58 @@ parent-project.order-service.payment-module.支付金额_元=支付金额: {} �
 
 - **单模块项目**: 如果项目根目录直接包含 `pom.xml`，不会添加模块前缀
 - **非Maven项目**: 如果没有找到 `pom.xml`，按普通项目处理，不添加前缀
+
+## AI智能键名生成
+
+工具支持使用AI模型生成更加语义化的英文键名，提升配置文件的可读性：
+
+### 配置方法
+
+1. **环境变量配置**: 复制 `.env.example` 为 `.env` 并填入API配置
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **编辑 .env 文件**:
+   ```env
+   OPENAI_API_KEY=your_api_key_here
+   OPENAI_API_BASE_URL=https://your-api-endpoint.com
+   ```
+
+3. **安装依赖**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### 功能特性
+
+- **智能生成**: 使用 `qwen2.5:14b` 模型分析中文字符串含义，生成简短的英文键名
+- **自动回退**: 当API不可用时，自动回退到传统的键名生成方法
+- **长度限制**: AI生成的键名限制在30个字符以内
+- **格式规范**: 自动清理和格式化，确保键名符合规范（小写字母和下划线）
+
+### 示例对比
+
+**传统方法**:
+```properties
+user-service.用户登录成功=用户登录成功
+user-service.数据保存失败=数据保存失败
+user-service.权限验证失败=权限验证失败
+```
+
+**AI生成**:
+```properties
+user-service.user_login_success=用户登录成功
+user-service.data_save_failed=数据保存失败
+user-service.permission_verify_failed=权限验证失败
+```
+
+### 测试功能
+
+运行测试脚本验证AI键名生成功能：
+```bash
+python test_ai_key_generation.py
+```
 
 ### 非英文字符检测规则
 
