@@ -431,7 +431,8 @@ class JavaStringExtractor:
             }
             
             # 构建提示词 qwen3 模型需要关闭思考
-            prompt = f"""/no_think 请为以下代码块中的字符串
+            # prompt = f"""/no_think 请为以下代码块中的字符串
+            prompt = f"""请为以下代码块中的字符串
 
 ```
 {string_value}
@@ -448,10 +449,11 @@ class JavaStringExtractor:
                 invalid_keys_str = ", ".join(sorted(invalid_keys))
                 print(f"当前无效键名: {invalid_keys_str}")
                 prompt += f"""
-4. 不要返回以下结果 {invalid_keys_str}, 包括他们的大小写，请换一个其他键名"""
+4. 不要返回以下结果 `{invalid_keys_str}`, 请尝试使用简写或拼音"""
             
             data = {
-                'model': 'qwen3:14b',
+                # 'model': 'qwen3:14b',
+                'model': 'gemma3:12b',
                 'stream': False,
                 'messages': [
                     {
@@ -493,6 +495,7 @@ class JavaStringExtractor:
                 else:
                     print(f"警告: 【{string_value}】生成的AI键名 `{ai_key}` 不符合要求，已被截断。")
                     print(f"AI 返回的原始信息: {result['choices'][0]['message']['content']}")
+                    return None, original_key
                     
         except Exception as e:
             print(f"AI键名生成失败: {e}")
@@ -545,9 +548,9 @@ class JavaStringExtractor:
                         invalid_keys.add(original_key)
                     print(f"警告: 【{string_value}】的AI键名生成失败，尝试第 {attempt} 次... {original_key}")
                     # 如果连续失败多次，可以考虑退出
-                    if attempt >= 100:
-                        print(f"AI键名生成连续失败 {attempt} 次，退出AI生成模式")
-                        break
+                    # if attempt >= 100:
+                        # print(f"AI键名生成连续失败 {attempt} 次，退出AI生成模式")
+                        # break
         
         # 等待用户输入 y/n 决定是否回退到传统方法
         choice = input("是否回退到传统方法生成键名？(y/n)：").lower()
