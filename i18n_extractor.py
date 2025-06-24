@@ -439,9 +439,9 @@ class JavaStringExtractor:
 
 生成一个简短的英文键名，要求：
 
-1. 使用小写字母和下划线
+1. 只能使用小写字母、数字和下划线, 不能包含其他字符
 2. 长度不超过50个字符
-3. 只返回键名，不要其他内容"""
+3. 只返回最终键名，不要其他内容"""
             
             # 如果有无效键名，添加到提示词中
             if invalid_keys:
@@ -540,7 +540,10 @@ class JavaStringExtractor:
                         invalid_keys.add(original_key)
                         print(f"警告: AI生成的键名 `{full_key}` 已存在，尝试第 {attempt} 次重新生成【{string_value}】的键值...")
                 else:
-                    print(f"警告: AI键名生成失败，尝试第 {attempt} 次...")
+                    # 记录无效键名
+                    if original_key:
+                        invalid_keys.add(original_key)
+                    print(f"警告: 【{string_value}】的AI键名生成失败，尝试第 {attempt} 次... {original_key}")
                     # 如果连续失败多次，可以考虑退出
                     if attempt >= 100:
                         print(f"AI键名生成连续失败 {attempt} 次，退出AI生成模式")
