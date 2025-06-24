@@ -42,6 +42,9 @@ class JavaStringExtractor:
         self.api_base_url = os.getenv('OPENAI_API_BASE_URL', 'https://api.openai.com')
         self.use_ai_key_generation = bool(self.api_key and self.api_base_url)
         
+        # 配置选项：是否忽略日志中的字符串，默认为True
+        self.ignore_log_strings = True
+        
         # 需要排除的字符串模式
         self.exclude_patterns = [
             r'^\s*$',  # 空字符串或只有空白字符
@@ -70,7 +73,43 @@ class JavaStringExtractor:
         non_english_pattern = re.compile(r'[^\x00-\x7F]|[\u2000-\u206F\u2E00-\u2E7F\u3000-\u303F\uFF00-\uFFEF]')
         return bool(non_english_pattern.search(string_value))
     
-    def is_valid_string(self, string_value: str) -> bool:
+    def is_log_string(self, string_value: str, context: str = "") -> bool:
+        """检测字符串是否来自日志语句"""
+        if not self.ignore_log_strings:
+            return False
+            
+        # 检查字符串内容是否包含典型的日志关键词
+        log_keywords = []
+        
+        # 检查是否包含日志关键词
+        for keyword in log_keywords:
+            if keyword in string_value:
+                return True
+        
+        # 检查上下文是否包含日志相关的方法调用
+        if context:
+            log_method_patterns = [
+                r'log\.',  # log.info(), log.error() 等
+                r'logger\.',  # logger.info(), logger.error() 等
+                r'Logger\.',  # Logger.getLogger() 等
+                r'LoggerFactory\.',  # LoggerFactory.getLogger() 等
+                r'\.info\s*\(',  # .info()
+                r'\.debug\s*\(',  # .debug()
+                r'\.warn\s*\(',  # .warn()
+                r'\.error\s*\(',  # .error()
+                r'\.trace\s*\(',  # .trace()
+                r'System\.out\.print',  # System.out.print/println
+                r'System\.err\.print',  # System.err.print/println
+                r'printStackTrace',  # printStackTrace()
+            ]
+            
+            for pattern in log_method_patterns:
+                if re.search(pattern, context, re.IGNORECASE):
+                    return True
+        
+        return False
+    
+    def is_valid_string(self, string_value: str, context: str = "") -> bool:
         """判断字符串是否应该被提取"""
         if not string_value or len(string_value.strip()) < 2:
             return False
@@ -82,6 +121,10 @@ class JavaStringExtractor:
         
         # 只提取包含非英文字符的字符串
         if not self.contains_non_english(string_value):
+            return False
+        
+        # 检查是否为日志字符串（如果启用了忽略日志字符串选项）
+        if self.is_log_string(string_value, context):
             return False
                 
         return True
@@ -363,17 +406,21 @@ class JavaStringExtractor:
         
         # 提取普通字符串
         strings = set()
-        matches = self.string_pattern.findall(cleaned_content)
         
-        for match in matches:
-            # match[0] 是完整的字符串内容
-            string_value = match[0]
-            if self.is_valid_string(string_value):
-                strings.add(string_value)
+        # 按行分析，获取每个字符串的上下文
+        lines = cleaned_content.split('\n')
+        for line_num, line in enumerate(lines):
+            line_matches = self.string_pattern.findall(line)
+            for match in line_matches:
+                string_value = match[0]
+                # 传递当前行作为上下文
+                if self.is_valid_string(string_value, line):
+                    strings.add(string_value)
         
         # 添加检测到的拼接字符串
-        for formatted_string in concatenated_strings.values():
-            if self.is_valid_string(formatted_string):
+        for original_pattern, formatted_string in concatenated_strings.items():
+            # 对于拼接字符串，传递原始模式作为上下文
+            if self.is_valid_string(formatted_string, original_pattern):
                 strings.add(formatted_string)
                 
         return strings
@@ -449,7 +496,7 @@ class JavaStringExtractor:
                 invalid_keys_str = ", ".join(sorted(invalid_keys))
                 print(f"当前无效键名: {invalid_keys_str}")
                 prompt += f"""
-4. 不要返回以下结果 `{invalid_keys_str}`, 请尝试使用简写或拼音"""
+4. 不要返回以下结果 `{invalid_keys_str}`, 请尝试使用简写或拼音或添加数字"""
             
             data = {
                 # 'model': 'qwen3:14b',
@@ -536,12 +583,12 @@ class JavaStringExtractor:
                     # 检查键名是否已存在
                     if full_key not in existing_keys:
                         if attempt > 1:
-                            print(f"AI键名生成成功: '{full_key}' (尝试第 {attempt} 次)")
+                            print(f"AI键名生成成功: '{ai_key}' (尝试第 {attempt} 次)")
                         return full_key
                     else:
                         # 记录无效键名
                         invalid_keys.add(original_key)
-                        print(f"警告: AI生成的键名 `{full_key}` 已存在，尝试第 {attempt} 次重新生成【{string_value}】的键值...")
+                        print(f"警告: AI生成的键名 `{ai_key}` 已存在，尝试第 {attempt} 次重新生成【{string_value}】的键值...")
                 else:
                     # 记录无效键名
                     if original_key:
@@ -680,8 +727,10 @@ def main():
     parser = argparse.ArgumentParser(description='Java Spring Boot项目国际化字符串提取工具')
     parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity', help='Java项目目录路径')
     # parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity\\DataCenter\\dev\\datacenter\\datacenter-openservice', help='Java项目目录路径')
-    parser.add_argument('--config_file', default='D:\\Downloads\\messages.properties', help='多语言配置文件路径')
+    parser.add_argument('--config_file', default='D:\\Downloads\\messages_no_log.properties', help='多语言配置文件路径')
     parser.add_argument('--encoding', default='utf-8', help='文件编码 (默认: utf-8)')
+    parser.add_argument('--ignore-log-strings', action='store_true', default=True, help='是否忽略日志中的字符串 (默认: True)')
+    parser.add_argument('--include-log-strings', action='store_true', help='包含日志中的字符串 (覆盖 --ignore-log-strings)')
     
     args = parser.parse_args()
     
