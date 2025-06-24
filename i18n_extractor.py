@@ -479,8 +479,11 @@ class JavaStringExtractor:
             
         return None
     
-    def generate_key(self, string_value: str, file_path: Path = None) -> str:
+    def generate_key(self, string_value: str, file_path: Path = None, existing_keys: set = None) -> str:
         """为字符串生成键，包含模块前缀"""
+        if existing_keys is None:
+            existing_keys = set()
+            
         # 生成模块前缀
         module_prefix = ""
         if file_path:
@@ -489,14 +492,27 @@ class JavaStringExtractor:
                 module_prefix = ".".join(modules) + "."
         
         # 尝试使用AI生成键名
-        ai_key = self._generate_ai_key(string_value)
         if self.use_ai_key_generation:
-            while not ai_key:
-                print(f"警告: AI键名生成失败，正在重新生成...")
+            max_attempts = 3
+            for attempt in range(max_attempts):
                 ai_key = self._generate_ai_key(string_value)
-                print(f"生成的AI键名: {ai_key}")
-
-            return module_prefix + ai_key
+                if ai_key:
+                    full_key = module_prefix + ai_key
+                    # 检查键名是否已存在
+                    if full_key not in existing_keys:
+                        return full_key
+                    else:
+                        print(f"警告: AI生成的键名 '{full_key}' 已存在，尝试第 {attempt + 1}/{max_attempts} 次重新生成...")
+                else:
+                    print(f"警告: AI键名生成失败，尝试第 {attempt + 1}/{max_attempts} 次...")
+            
+            # AI生成失败或重复，添加后缀确保唯一性
+            if ai_key:
+                base_full_key = module_prefix + ai_key
+                counter = 1
+                while f"{base_full_key}_{counter}" in existing_keys:
+                    counter += 1
+                return f"{base_full_key}_{counter}"
         
         # 回退到传统方法
         # 清理字符串，移除特殊字符
@@ -512,8 +528,17 @@ class JavaStringExtractor:
             if len(cleaned) > 50:
                 cleaned = cleaned[:47] + "_" + hashlib.md5(string_value.encode('utf-8')).hexdigest()[:3]
             base_key = cleaned.lower()
-            
-        return module_prefix + base_key
+        
+        # 确保传统方法生成的键名也是唯一的
+        full_key = module_prefix + base_key
+        if full_key not in existing_keys:
+            return full_key
+        
+        # 添加后缀确保唯一性
+        counter = 1
+        while f"{full_key}_{counter}" in existing_keys:
+            counter += 1
+        return f"{full_key}_{counter}"
     
     def load_existing_config(self, config_path: Path) -> OrderedDict[str, str]:
         """加载现有的配置文件"""
@@ -602,19 +627,17 @@ def main():
     
     # 生成新的键值对
     new_entries = 0
+    existing_keys = set(existing_config.keys())
+    
     for string_value, file_path in extracted_strings.items():
-        key = extractor.generate_key(string_value, file_path)
+        # 传递已存在的键名集合，确保生成唯一键名
+        key = extractor.generate_key(string_value, file_path, existing_keys)
         print(f"{key} = {string_value}")
         
-        # 避免键冲突
-        original_key = key
-        counter = 1
-        while key in existing_config and existing_config[key] != string_value:
-            key = f"{original_key}_{counter}"
-            counter += 1
-        
+        # 检查是否有相同值的不同键
         if key not in existing_config:
             existing_config[key] = string_value
+            existing_keys.add(key)  # 更新已存在键名集合
             new_entries += 1
             # print(f"新增: {key} = {string_value}")
     
