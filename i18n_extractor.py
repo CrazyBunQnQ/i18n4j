@@ -423,8 +423,9 @@ class JavaStringExtractor:
                 'Content-Type': 'application/json'
             }
             
-            # 构建提示词
-            prompt = f"""请为以下中文字符串生成一个简短的英文键名，要求：
+            # 构建提示词 qwen3 模型需要关闭思考
+            # prompt = f"""请为以下中文字符串生成一个简短的英文键名，要求：
+            prompt = f"""/no_think 请为以下中文字符串生成一个简短的英文键名，要求：
 1. 使用小写字母和下划线
 2. 长度不超过30个字符
 3. 能够准确表达字符串的含义
@@ -433,7 +434,8 @@ class JavaStringExtractor:
 字符串：{string_value}"""
             
             data = {
-                'model': 'qwen2.5:14b',
+                'model': 'qwen3:14b',
+                'stream': False,
                 'messages': [
                     {
                         'role': 'user',
@@ -455,12 +457,22 @@ class JavaStringExtractor:
             if response.status_code == 200:
                 result = response.json()
                 ai_key = result['choices'][0]['message']['content'].strip()
+                # 如果结果中包含 <think> 标签
+                # 则使用正则移除 <think>...</think> 标签及其中的内容
+                if "<think>" in ai_key:
+                    # print(f"原始AI键名: {ai_key}")
+                    # 正则移除 <think>...</think> 标签及其中的内容
+                    ai_key = re.sub(r'<think>[.\s]*?</think>', '', ai_key).strip()
+                    # print(f"移除标签后的AI键名: {ai_key}")
                 # 清理AI生成的键名
                 ai_key = re.sub(r'[^a-zA-Z0-9_]', '_', ai_key)
                 ai_key = re.sub(r'_+', '_', ai_key).strip('_').lower()
                 
-                if ai_key and len(ai_key) <= 30:
+                # if ai_key and len(ai_key) <= 50:
+                if ai_key:
                     return ai_key
+                else:
+                    print(f"警告: 生成的AI键名 {ai_key} 不符合要求，已被截断。")
                     
         except Exception as e:
             print(f"AI键名生成失败: {e}")
@@ -478,7 +490,12 @@ class JavaStringExtractor:
         
         # 尝试使用AI生成键名
         ai_key = self._generate_ai_key(string_value)
-        if ai_key:
+        if self.use_ai_key_generation:
+            while not ai_key:
+                print(f"警告: AI键名生成失败，正在重新生成...")
+                ai_key = self._generate_ai_key(string_value)
+                print(f"生成的AI键名: {ai_key}")
+
             return module_prefix + ai_key
         
         # 回退到传统方法
