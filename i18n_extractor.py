@@ -399,6 +399,9 @@ class JavaStringExtractor:
         """查找文件所属的模块路径，返回模块名列表"""
         modules = []
         current_path = file_path.parent
+
+        if "-openservice" in current_path.name:
+            print("test")
         
         # 向上查找包含pom.xml的目录
         while current_path.parent != current_path:  # 避免到达根目录
@@ -406,16 +409,19 @@ class JavaStringExtractor:
             if pom_file.exists():
                 module_name = current_path.name.lower()
                 # 过滤掉临时目录名（通常以tmp开头）和其他无意义的目录名
-                if not (module_name.startswith('tmp') or module_name.startswith('temp') or len(module_name) > 20):
+                if not (module_name.startswith('tmp') or module_name.startswith('temp')):
                     modules.insert(0, module_name)
             current_path = current_path.parent
             
         return modules
     
-    def _generate_ai_key(self, string_value: str) -> str:
+    def _generate_ai_key(self, string_value: str, invalid_keys: set = None) -> str:
         """使用AI生成简短的键名"""
         if not self.use_ai_key_generation:
-            return None
+            return None, None
+            
+        if invalid_keys is None:
+            invalid_keys = set()
             
         try:
             # 构建API请求
@@ -425,14 +431,24 @@ class JavaStringExtractor:
             }
             
             # 构建提示词 qwen3 模型需要关闭思考
-            # prompt = f"""请为以下中文字符串生成一个简短的英文键名，要求：
-            prompt = f"""/no_think 请为以下中文字符串生成一个简短的英文键名，要求：
-1. 使用小写字母和下划线
-2. 长度不超过30个字符
-3. 能够准确表达字符串的含义
-4. 只返回键名，不要其他内容
+            prompt = f"""/no_think 请为以下代码块中的字符串
 
-字符串：{string_value}"""
+```
+{string_value}
+```
+
+生成一个简短的英文键名，要求：
+
+1. 使用小写字母和下划线
+2. 长度不超过50个字符
+3. 只返回键名，不要其他内容"""
+            
+            # 如果有无效键名，添加到提示词中
+            if invalid_keys:
+                invalid_keys_str = ", ".join(sorted(invalid_keys))
+                print(f"当前无效键名: {invalid_keys_str}")
+                prompt += f"""
+4. 不要返回以下结果 {invalid_keys_str}, 包括他们的大小写，请换一个其他键名"""
             
             data = {
                 'model': 'qwen3:14b',
@@ -465,13 +481,15 @@ class JavaStringExtractor:
                     # 正则移除 <think>...</think> 标签及其中的内容
                     ai_key = re.sub(r'<think>[.\s]*?</think>', '', ai_key).strip()
                     # print(f"移除标签后的AI键名: {ai_key}")
+                # 原始结果
+                original_key = ai_key
                 # 清理AI生成的键名
                 ai_key = re.sub(r'[^a-zA-Z0-9_]', '_', ai_key)
                 ai_key = re.sub(r'_+', '_', ai_key).strip('_').lower()
                 
                 # if ai_key and len(ai_key) <= 50:
                 if ai_key and len(ai_key) > 0:
-                    return ai_key
+                    return ai_key, original_key
                 else:
                     print(f"警告: 【{string_value}】生成的AI键名 `{ai_key}` 不符合要求，已被截断。")
                     print(f"AI 返回的原始信息: {result['choices'][0]['message']['content']}")
@@ -479,7 +497,7 @@ class JavaStringExtractor:
         except Exception as e:
             print(f"AI键名生成失败: {e}")
             
-        return None
+        return None, None
     
     def generate_key(self, string_value: str, file_path: Path = None, existing_keys: set = None, existing_config: dict = None) -> str:
         """为字符串生成键，包含模块前缀"""
@@ -503,26 +521,30 @@ class JavaStringExtractor:
         
         # 尝试使用AI生成键名
         if self.use_ai_key_generation:
-            max_attempts = 3
-            for attempt in range(max_attempts):
-                ai_key = self._generate_ai_key(string_value)
+            invalid_keys = set()  # 记录无效的键名
+            attempt = 0
+            
+            while True:
+                attempt += 1
+                ai_key, original_key = self._generate_ai_key(string_value, invalid_keys)
+                
                 if ai_key:
                     full_key = module_prefix + ai_key
                     # 检查键名是否已存在
                     if full_key not in existing_keys:
+                        if attempt > 1:
+                            print(f"AI键名生成成功: '{full_key}' (尝试第 {attempt} 次)")
                         return full_key
                     else:
-                        print(f"警告: AI生成的键名 '{full_key}' 已存在，尝试第 {attempt + 1}/{max_attempts} 次重新生成...")
+                        # 记录无效键名
+                        invalid_keys.add(original_key)
+                        print(f"警告: AI生成的键名 `{full_key}` 已存在，尝试第 {attempt} 次重新生成【{string_value}】的键值...")
                 else:
-                    print(f"警告: AI键名生成失败，尝试第 {attempt + 1}/{max_attempts} 次...")
-            
-            # AI生成失败或重复，添加后缀确保唯一性
-            if ai_key:
-                base_full_key = module_prefix + ai_key
-                counter = 1
-                while f"{base_full_key}_{counter}" in existing_keys:
-                    counter += 1
-                return f"{base_full_key}_{counter}"
+                    print(f"警告: AI键名生成失败，尝试第 {attempt} 次...")
+                    # 如果连续失败多次，可以考虑退出
+                    if attempt >= 100:
+                        print(f"AI键名生成连续失败 {attempt} 次，退出AI生成模式")
+                        break
         
         # 等待用户输入 y/n 决定是否回退到传统方法
         choice = input("是否回退到传统方法生成键名？(y/n)：").lower()
@@ -650,8 +672,9 @@ class JavaStringExtractor:
 
 def main():
     parser = argparse.ArgumentParser(description='Java Spring Boot项目国际化字符串提取工具')
-    parser.add_argument('project_dir', help='Java项目目录路径')
-    parser.add_argument('config_file', help='多语言配置文件路径')
+    parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity', help='Java项目目录路径')
+    # parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity\\DataCenter\\dev\\datacenter\\datacenter-openservice', help='Java项目目录路径')
+    parser.add_argument('--config_file', default='D:\\Downloads\\messages.properties', help='多语言配置文件路径')
     parser.add_argument('--encoding', default='utf-8', help='文件编码 (默认: utf-8)')
     
     args = parser.parse_args()
