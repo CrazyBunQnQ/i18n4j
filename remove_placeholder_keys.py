@@ -5,10 +5,19 @@
 
 该脚本读取主配置文件(messages.properties)中包含占位符的键名，
 然后在其他多语言配置文件中删除这些键值对。
+
+使用方法:
+    python remove_placeholder_keys.py [主配置文件路径]
+    
+    如果不指定路径，默认使用当前目录的 messages.properties
+    其他语言文件会自动从同目录下查找符合 原文件名_[a-z]+.properties 格式的文件
 """
 
 import os
 import re
+import sys
+import argparse
+import glob
 from typing import List, Set
 
 def find_placeholder_keys(properties_file: str) -> Set[str]:
@@ -103,18 +112,82 @@ def remove_keys_from_file(properties_file: str, keys_to_remove: Set[str]) -> boo
         print(f"处理文件 {properties_file} 时出错: {e}")
         return False
 
+def find_other_language_files(main_properties_file: str) -> List[str]:
+    """
+    根据主配置文件路径，自动查找同目录下的其他语言配置文件
+    
+    Args:
+        main_properties_file: 主配置文件路径
+        
+    Returns:
+        其他语言配置文件路径列表
+    """
+    # 获取文件目录和基础文件名
+    file_dir = os.path.dirname(main_properties_file)
+    file_name = os.path.basename(main_properties_file)
+    
+    # 去掉扩展名
+    base_name = os.path.splitext(file_name)[0]
+    
+    # 构建搜索模式：原文件名_[a-z]+.properties
+    pattern = os.path.join(file_dir, f"{base_name}_[a-z]*.properties")
+    
+    # 查找匹配的文件
+    other_files = glob.glob(pattern)
+    
+    # 过滤掉主文件本身（如果意外匹配到）
+    other_files = [f for f in other_files if os.path.abspath(f) != os.path.abspath(main_properties_file)]
+    
+    return other_files
+
+def parse_arguments():
+    """
+    解析命令行参数
+    
+    Returns:
+        解析后的参数对象
+    """
+    parser = argparse.ArgumentParser(
+        description='删除多语言配置文件中包含占位符的键值对',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+示例:
+  python remove_placeholder_keys.py
+  python remove_placeholder_keys.py ./config/messages.properties
+  python remove_placeholder_keys.py /path/to/app.properties
+        '''
+    )
+    
+    parser.add_argument(
+        'main_file',
+        nargs='?',
+        default='messages.properties',
+        help='主配置文件路径 (默认: messages.properties)'
+    )
+    
+    return parser.parse_args()
+
 def main():
     """
     主函数
     """
-    # 主配置文件路径
-    main_properties = "d:/Documents/MEGA/Scripts/python/i18n4j/messages.properties"
+    # 解析命令行参数
+    args = parse_arguments()
     
-    # 其他语言配置文件
-    other_properties_files = [
-        "d:/Documents/MEGA/Scripts/python/i18n4j/messages_en.properties",
-        "d:/Documents/MEGA/Scripts/python/i18n4j/messages_ja.properties"
-    ]
+    # 主配置文件路径
+    main_properties = args.main_file
+    
+    # 如果是相对路径，转换为绝对路径
+    if not os.path.isabs(main_properties):
+        main_properties = os.path.abspath(main_properties)
+    
+    # 检查主配置文件是否存在
+    if not os.path.exists(main_properties):
+        print(f"错误: 主配置文件 {main_properties} 不存在")
+        sys.exit(1)
+    
+    # 自动查找其他语言配置文件
+    other_properties_files = find_other_language_files(main_properties)
     
     print("开始处理多语言配置文件...")
     print(f"主配置文件: {main_properties}")
