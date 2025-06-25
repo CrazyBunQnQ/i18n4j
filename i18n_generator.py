@@ -25,6 +25,36 @@ OPENAI_API_BASE_URL = os.getenv('OPENAI_API_BASE_URL', 'https://api.openai.com')
 MODEL_NAME = 'gemma3:12b'
 
 
+def count_placeholders(text: str) -> int:
+    """
+    统计文本中占位符的数量
+    
+    Args:
+        text: 要统计的文本
+        
+    Returns:
+        int: 占位符数量
+    """
+    # 匹配 {数字} 或 {变量名} 格式的占位符
+    placeholders = re.findall(r'\{\w*\d*\w*\}', text)
+    return len(placeholders)
+
+
+def validate_placeholder_count(source_value: str, translated_value: str) -> bool:
+    """
+    验证翻译后的文本占位符数量是否与原文一致
+    
+    Args:
+        source_value: 原始文本
+        translated_value: 翻译后的文本
+        
+    Returns:
+        bool: 占位符数量是否一致
+    """
+    source_count = count_placeholders(source_value)
+    translated_count = count_placeholders(translated_value)
+    return source_count == translated_count
+
 
 def parse_properties_file(file_path: str) -> List[Tuple[str, str]]:
     """
@@ -107,8 +137,9 @@ def translate_property_line(key: str, source_value: str, target_language: str = 
 生成对应的 _{target_language} 配置，要求：
 1. 保持键名不变，只翻译值部分
 2. 翻译要准确、自然，适合软件界面国际化
-3. 只返回翻译后的值，不要包含键名和等号
-4. 不要添加任何额外的说明或格式
+3. 确保占位符数量要一致，不能多也不能少
+4. 只返回翻译后的值，不要包含键名和等号
+5. 不要添加任何额外的说明或格式
 
 {target_lang_name}翻译值："""
         
@@ -157,7 +188,7 @@ def translate_property_line(key: str, source_value: str, target_language: str = 
             elif translation.startswith("'") and translation.endswith("'"):
                 translation = translation[1:-1]
             
-            print(f"AI翻译: {key}={source_value} -> {key}={translation}")
+            print(f"AI翻译: \n{key}={source_value}\n{key}={translation}")
             return translation
         else:
             print(f"API请求失败: {response.status_code} - {response.text}")
@@ -249,8 +280,28 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
                 # print(f"保留现有翻译: {key} = {target_value}")
             else:
                 # 生成新的翻译
-                target_value = translate_property_line(key, source_value, target_language)
-                print(f"新增翻译: {key} = {target_value}")
+                max_retries = 5
+                retry_count = 0
+                target_value = None
+                
+                while retry_count < max_retries:
+                    target_value = translate_property_line(key, source_value, target_language)
+                    
+                    # 验证占位符数量
+                    if validate_placeholder_count(source_value, target_value):
+                        break
+                    else:
+                        retry_count += 1
+                        source_placeholders = count_placeholders(source_value)
+                        translated_placeholders = count_placeholders(target_value)
+                        print(f"警告: 占位符数量不匹配 {key}")
+                        print(f"  原文占位符数量: {source_placeholders}, 翻译占位符数量: {translated_placeholders}")
+                        print(f"  第 {retry_count} 次重试...")
+                        
+                        if retry_count >= max_retries:
+                            print(f"  达到最大重试次数，使用最后一次翻译结果")
+                            break
+                
                 added_count += 1
                 
             new_target_properties.append((key, target_value))
