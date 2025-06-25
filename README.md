@@ -1,6 +1,11 @@
-# Java Spring Boot 国际化字符串提取工具
+# Java Spring Boot 国际化工具集
 
-这是一个用于从Java Spring Boot项目中提取硬编码字符串并生成国际化配置文件的Python工具。
+这是一个用于Java Spring Boot项目国际化的Python工具集，包含字符串提取和多语言配置文件生成两个核心工具。
+
+## 工具概览
+
+1. **`i18n_extractor.py`** - 从Java源码中提取硬编码字符串并生成国际化配置文件
+2. **`i18n_generator.py`** - 基于源配置文件生成多语言翻译配置文件
 
 ## 功能特性
 
@@ -286,6 +291,202 @@ pip install click     # 更友好的命令行界面
 ```
 
 注意：chardet库已经是必需依赖，用于字符编码检测。
+
+---
+
+# 多语言配置文件生成工具 (i18n_generator.py)
+
+`i18n_generator.py` 是一个智能的多语言配置文件生成工具，能够根据源配置文件自动生成多种语言的翻译配置文件。
+
+## 功能特性
+
+1. **AI智能翻译**：使用OpenAI格式的API调用AI模型进行翻译
+2. **多语言支持**：支持生成英文、法文、德文、日文、韩文等多种语言配置
+3. **命令行参数**：灵活的命令行参数支持，可指定源文件和目标语言
+4. **批量处理**：一次命令可生成多个语言的配置文件
+5. **增量更新**：保留现有翻译，只生成缺失的配置项
+6. **顺序保持**：生成的配置文件与源文件保持相同的键值对顺序
+7. **错误处理**：完善的错误处理和状态报告机制
+
+## 环境配置
+
+### 1. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+主要依赖包括：
+- `requests>=2.28.0` - HTTP请求库
+- `python-dotenv>=1.0.0` - 环境变量管理
+
+### 2. 配置API密钥
+
+复制 `.env.example` 为 `.env` 并配置API信息：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件：
+```env
+OPENAI_API_KEY=your_api_key_here
+OPENAI_API_BASE_URL=https://your-api-endpoint.com
+```
+
+**注意**：工具使用 `gemma3:12b` 模型进行翻译，确保您的API端点支持该模型。
+
+## 使用方法
+
+### 基本语法
+
+```bash
+python i18n_generator.py [选项]
+```
+
+### 命令行参数
+
+- **`-s, --source`**: 源配置文件路径（默认：`messages.properties`）
+- **`-l, --languages`**: 目标语言列表（默认：`['en']`）
+
+### 支持的语言代码
+
+| 语言代码 | 语言名称 | 语言代码 | 语言名称 |
+|---------|---------|---------|----------|
+| `en` | 英文 | `fr` | 法文 |
+| `de` | 德文 | `ja` | 日文 |
+| `ko` | 韩文 | `es` | 西班牙文 |
+| `it` | 意大利文 | `pt` | 葡萄牙文 |
+| `ru` | 俄文 | `ar` | 阿拉伯文 |
+
+### 使用示例
+
+#### 1. 使用默认参数
+```bash
+# 从 messages.properties 生成 messages_en.properties
+python i18n_generator.py
+```
+
+#### 2. 指定源文件
+```bash
+# 从指定文件生成英文配置
+python i18n_generator.py -s config.properties
+```
+
+#### 3. 生成多种语言配置
+```bash
+# 生成英文、法文、德文配置文件
+python i18n_generator.py -l en fr de
+```
+
+#### 4. 指定源文件并生成多语言配置
+```bash
+# 从 app.properties 生成英文、日文、韩文配置
+python i18n_generator.py -s app.properties -l en ja ko
+```
+
+#### 5. 生成所有支持的语言
+```bash
+# 生成所有支持的语言配置文件
+python i18n_generator.py -l en fr de ja ko es it pt ru ar
+```
+
+## 工作流程
+
+1. **解析源文件**：读取源配置文件中的所有键值对
+2. **检查现有翻译**：扫描目标语言配置文件，识别已存在的翻译
+3. **AI翻译**：对缺失的配置项调用AI模型进行翻译
+4. **生成配置文件**：按照源文件顺序生成目标语言配置文件
+5. **状态报告**：显示处理进度和成功率统计
+
+## 输出格式
+
+### 源文件示例 (messages.properties)
+```properties
+user.login.success=用户登录成功
+user.login.failed=用户登录失败
+data.save.success=数据保存成功
+network.connection.failed=网络连接失败
+```
+
+### 生成的英文配置 (messages_en.properties)
+```properties
+user.login.success=User login successful
+user.login.failed=User login failed
+data.save.success=Data saved successfully
+network.connection.failed=Network connection failed
+```
+
+### 生成的日文配置 (messages_ja.properties)
+```properties
+user.login.success=ユーザーログイン成功
+user.login.failed=ユーザーログイン失敗
+data.save.success=データ保存成功
+network.connection.failed=ネットワーク接続失敗
+```
+
+## 高级功能
+
+### 增量更新
+
+如果目标语言配置文件已存在，工具会：
+- 保留现有的翻译内容
+- 只翻译新增的配置项
+- 保持与源文件相同的键值对顺序
+
+### 错误处理
+
+- **API不可用**：当API密钥未配置或API调用失败时，返回原文并显示错误信息
+- **文件不存在**：自动检查源文件是否存在，提供清晰的错误提示
+- **网络超时**：设置30秒超时，避免长时间等待
+- **翻译清理**：自动清理AI返回结果中的前缀文本
+
+### 批量处理统计
+
+工具会显示详细的处理统计信息：
+```
+任务完成! 成功生成 3/3 个语言配置文件
+```
+
+## 注意事项
+
+1. **API配置**：确保 `.env` 文件中的API配置正确
+2. **模型支持**：确认API端点支持 `gemma3:12b` 模型
+3. **文件编码**：建议使用UTF-8编码保存配置文件
+4. **备份建议**：在批量生成前建议备份现有配置文件
+5. **网络连接**：确保网络连接稳定，避免翻译中断
+
+## 故障排除
+
+### 常见问题
+
+**Q: 提示"未设置OPENAI_API_KEY"**
+A: 检查 `.env` 文件是否存在且包含正确的API密钥
+
+**Q: API请求失败**
+A: 检查API端点URL是否正确，网络连接是否正常
+
+**Q: 翻译质量不佳**
+A: 可以调整提示词或尝试不同的AI模型
+
+**Q: 生成的文件编码问题**
+A: 确保系统支持UTF-8编码，或使用支持Unicode的文本编辑器
+
+## 与 i18n_extractor.py 的配合使用
+
+推荐的工作流程：
+
+1. **提取字符串**：使用 `i18n_extractor.py` 从Java代码中提取硬编码字符串
+   ```bash
+   python i18n_extractor.py /path/to/project messages.properties
+   ```
+
+2. **生成翻译**：使用 `i18n_generator.py` 生成多语言配置文件
+   ```bash
+   python i18n_generator.py -s messages.properties -l en ja ko
+   ```
+
+3. **集成到项目**：将生成的配置文件集成到Spring Boot项目的资源目录中
 
 ## 许可证
 
