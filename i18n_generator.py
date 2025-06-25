@@ -58,20 +58,21 @@ def parse_properties_file(file_path: str) -> List[Tuple[str, str]]:
                 
     return properties
 
-def translate_text(source_text: str, target_language: str = 'en') -> str:
+def translate_property_line(key: str, source_value: str, target_language: str = 'en') -> str:
     """
-    使用AI模型翻译文本到目标语言
+    使用AI模型翻译整行配置到目标语言
     
     Args:
-        source_text: 源文本
+        key: 配置项的键
+        source_value: 源配置项的值
         target_language: 目标语言代码 (如: en, fr, de, ja, ko 等)
         
     Returns:
-        str: 翻译结果
+        str: 翻译后的配置值
     """
     if not OPENAI_API_KEY:
         print("错误: 未设置OPENAI_API_KEY，无法进行翻译")
-        return chinese_text
+        return source_value
     
     try:
         # 构建API请求
@@ -96,14 +97,20 @@ def translate_text(source_text: str, target_language: str = 'en') -> str:
         
         target_lang_name = language_names.get(target_language, f'{target_language}语')
         
+        # 构建完整的配置行
+        source_line = f"{key}={source_value}"
+        
         # 构建提示词
-        prompt = f"""请将以下文本翻译成{target_lang_name}，要求：
-1. 翻译要准确、自然
-2. 适合用于软件界面的国际化
-3. 只返回翻译结果，不要其他内容
+        prompt = f"""根据中文的 i18n 多语言配置 properties：
+`{source_line}`
 
-原文：{source_text}
-{target_lang_name}翻译："""
+生成对应的 _{target_language} 配置，要求：
+1. 保持键名不变，只翻译值部分
+2. 翻译要准确、自然，适合软件界面国际化
+3. 只返回翻译后的值，不要包含键名和等号
+4. 不要添加任何额外的说明或格式
+
+{target_lang_name}翻译值："""
         
         data = {
             'model': MODEL_NAME,
@@ -114,7 +121,7 @@ def translate_text(source_text: str, target_language: str = 'en') -> str:
                 }
             ],
             'temperature': 0.3,
-            'max_tokens': 100
+            'max_tokens': 150
         }
         
         # 发送API请求
@@ -125,21 +132,40 @@ def translate_text(source_text: str, target_language: str = 'en') -> str:
             result = response.json()
             translation = result['choices'][0]['message']['content'].strip()
             
-            # 清理翻译结果，移除可能的前缀
-            if translation.startswith('英文翻译：'):
-                translation = translation[5:].strip()
-            elif translation.startswith('Translation:'):
-                translation = translation[12:].strip()
+            # 清理翻译结果，移除可能的前缀和后缀
+            # 移除常见的前缀
+            prefixes_to_remove = [
+                f'{target_lang_name}翻译值：',
+                f'{target_lang_name}翻译：',
+                'Translation:',
+                '翻译值：',
+                '翻译：'
+            ]
             
-            print(f"AI翻译: {source_text} -> {translation}")
+            for prefix in prefixes_to_remove:
+                if translation.startswith(prefix):
+                    translation = translation[len(prefix):].strip()
+                    break
+            
+            # 移除可能包含的键名部分（如果AI返回了完整行）
+            if '=' in translation and translation.startswith(key):
+                translation = translation.split('=', 1)[1].strip()
+            
+            # 移除引号（如果有的话）
+            if translation.startswith('"') and translation.endswith('"'):
+                translation = translation[1:-1]
+            elif translation.startswith("'") and translation.endswith("'"):
+                translation = translation[1:-1]
+            
+            print(f"AI翻译: {key}={source_value} -> {key}={translation}")
             return translation
         else:
             print(f"API请求失败: {response.status_code} - {response.text}")
-            return source_text
+            return source_value
             
     except Exception as e:
         print(f"翻译API调用出错: {e}")
-        return source_text
+        return source_value
 
 # 全局变量用于保存状态
 current_target_file = None
@@ -161,7 +187,7 @@ def save_properties_to_file(target_file: str, properties: List[Tuple[str, str]])
         for key, value in properties:
             f.write(f"{key}={value}\n")
     
-    print(f"已保存 {len(properties)} 个配置项到: {target_file}")
+    # print(f"已保存 {len(properties)} 个配置项到: {target_file}")
 
 def signal_handler(signum, frame):
     """
@@ -220,10 +246,10 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
             if key in existing_target_properties:
                 # 使用现有的翻译
                 target_value = existing_target_properties[key]
-                print(f"保留现有翻译: {key} = {target_value}")
+                # print(f"保留现有翻译: {key} = {target_value}")
             else:
                 # 生成新的翻译
-                target_value = translate_text(source_value, target_language)
+                target_value = translate_property_line(key, source_value, target_language)
                 print(f"新增翻译: {key} = {target_value}")
                 added_count += 1
                 
@@ -234,7 +260,7 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
             # 每100条保存一次
             if processed_count % save_batch_size == 0:
                 save_properties_to_file(target_file, new_target_properties)
-                print(f"批量保存完成，已处理 {processed_count}/{len(source_properties)} 个配置项")
+                # print(f"批量保存完成，已处理 {processed_count}/{len(source_properties)} 个配置项")
         
         # 最终保存
         save_properties_to_file(target_file, new_target_properties)
