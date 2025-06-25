@@ -11,6 +11,8 @@ import re
 import json
 import requests
 import argparse
+import signal
+import sys
 from typing import Dict, List, Tuple
 from dotenv import load_dotenv
 
@@ -139,6 +141,38 @@ def translate_text(source_text: str, target_language: str = 'en') -> str:
         print(f"翻译API调用出错: {e}")
         return source_text
 
+# 全局变量用于保存状态
+current_target_file = None
+current_properties = []
+save_batch_size = 100
+
+def save_properties_to_file(target_file: str, properties: List[Tuple[str, str]]) -> None:
+    """
+    保存配置项到文件
+    
+    Args:
+        target_file: 目标文件路径
+        properties: 配置项列表
+    """
+    if not properties:
+        return
+        
+    with open(target_file, 'w', encoding='utf-8') as f:
+        for key, value in properties:
+            f.write(f"{key}={value}\n")
+    
+    print(f"已保存 {len(properties)} 个配置项到: {target_file}")
+
+def signal_handler(signum, frame):
+    """
+    信号处理函数，用于处理用户中断
+    """
+    print("\n检测到用户中断，正在保存当前进度...")
+    if current_target_file and current_properties:
+        save_properties_to_file(current_target_file, current_properties)
+        print("进度已保存，程序退出")
+    sys.exit(0)
+
 def generate_language_properties(source_file: str, target_file: str, target_language: str) -> None:
     """
     根据源配置文件生成目标语言配置文件
@@ -148,6 +182,12 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
         target_file: 目标配置文件路径
         target_language: 目标语言代码
     """
+    global current_target_file, current_properties
+    
+    # 设置信号处理
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     print(f"正在处理源配置文件: {source_file}")
     
     # 解析源配置文件
@@ -166,32 +206,55 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
         existing_target_properties = {key: value for key, value in target_props}
         print(f"现有目标配置项: {len(existing_target_properties)} 个")
     
+    # 设置全局变量
+    current_target_file = target_file
+    current_properties = []
+    
     # 生成新的目标语言配置文件内容
     new_target_properties = []
     added_count = 0
+    processed_count = 0
     
-    for key, source_value in source_properties:
-        if key in existing_target_properties:
-            # 使用现有的翻译
-            target_value = existing_target_properties[key]
-            print(f"保留现有翻译: {key} = {target_value}")
-        else:
-            # 生成新的翻译
-            target_value = translate_text(source_value, target_language)
-            print(f"新增翻译: {key} = {target_value}")
-            added_count += 1
+    try:
+        for key, source_value in source_properties:
+            if key in existing_target_properties:
+                # 使用现有的翻译
+                target_value = existing_target_properties[key]
+                print(f"保留现有翻译: {key} = {target_value}")
+            else:
+                # 生成新的翻译
+                target_value = translate_text(source_value, target_language)
+                print(f"新增翻译: {key} = {target_value}")
+                added_count += 1
+                
+            new_target_properties.append((key, target_value))
+            current_properties = new_target_properties.copy()
+            processed_count += 1
             
-        new_target_properties.append((key, target_value))
-    
-    # 写入目标语言配置文件
-    with open(target_file, 'w', encoding='utf-8') as f:
-        for key, value in new_target_properties:
-            f.write(f"{key}={value}\n")
-    
-    print(f"\n生成完成!")
-    print(f"总配置项: {len(new_target_properties)}")
-    print(f"新增配置项: {added_count}")
-    print(f"目标配置文件已保存到: {target_file}")
+            # 每100条保存一次
+            if processed_count % save_batch_size == 0:
+                save_properties_to_file(target_file, new_target_properties)
+                print(f"批量保存完成，已处理 {processed_count}/{len(source_properties)} 个配置项")
+        
+        # 最终保存
+        save_properties_to_file(target_file, new_target_properties)
+        
+        print(f"\n生成完成!")
+        print(f"总配置项: {len(new_target_properties)}")
+        print(f"新增配置项: {added_count}")
+        print(f"目标配置文件已保存到: {target_file}")
+        
+    except Exception as e:
+        print(f"处理过程中出错: {e}")
+        # 出错时也保存当前进度
+        if current_properties:
+            print("正在保存当前进度...")
+            save_properties_to_file(target_file, current_properties)
+        raise
+    finally:
+        # 清理全局变量
+        current_target_file = None
+        current_properties = []
 
 def parse_arguments():
     """
