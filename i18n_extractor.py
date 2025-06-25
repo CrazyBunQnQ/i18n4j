@@ -440,6 +440,10 @@ class JavaStringExtractor:
             if 'src\\test' in str(java_file) or 'src/test' in str(java_file):
                 excluded_count += 1
                 continue
+            # 检查文件名是否包含 `Test`
+            if 'Test' in java_file.name:
+                excluded_count += 1
+                continue
             filtered_java_files.append(java_file)
         
         print(f"找到 {len(java_files)} 个Java文件，排除 {excluded_count} 个测试文件，处理 {len(filtered_java_files)} 个文件")
