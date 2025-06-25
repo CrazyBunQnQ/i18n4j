@@ -202,6 +202,8 @@ def translate_property_line(key: str, source_value: str, target_language: str = 
 current_target_file = None
 current_properties = []
 save_batch_size = 100
+# 记录占位符不匹配的配置项
+placeholder_mismatch_items = []
 
 def save_properties_to_file(target_file: str, properties: List[Tuple[str, str]]) -> None:
     """
@@ -300,6 +302,14 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
                         
                         if retry_count >= max_retries:
                             print(f"  达到最大重试次数，使用最后一次翻译结果")
+                            # 记录占位符不匹配的配置项
+                            placeholder_mismatch_items.append({
+                                'key': key,
+                                'source_value': source_value,
+                                'translated_value': target_value,
+                                'source_placeholders': source_placeholders,
+                                'translated_placeholders': translated_placeholders
+                            })
                             break
                 
                 added_count += 1
@@ -320,6 +330,20 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
         print(f"总配置项: {len(new_target_properties)}")
         print(f"新增配置项: {added_count}")
         print(f"目标配置文件已保存到: {target_file}")
+        
+        # 输出占位符不匹配的配置项汇总
+        if placeholder_mismatch_items:
+            print(f"\n⚠️  占位符不匹配汇总报告:")
+            print(f"共有 {len(placeholder_mismatch_items)} 个配置项的占位符数量不匹配:")
+            print("-" * 80)
+            for i, item in enumerate(placeholder_mismatch_items, 1):
+                print(f"{i}. 键名: {item['key']}")
+                print(f"   原文: {item['source_value']} (占位符数量: {item['source_placeholders']})")
+                print(f"   翻译: {item['translated_value']} (占位符数量: {item['translated_placeholders']})")
+                print()
+            print("建议手动检查并修正这些配置项的翻译。")
+        else:
+            print("\n✅ 所有配置项的占位符数量都匹配正确！")
         
     except Exception as e:
         print(f"处理过程中出错: {e}")
