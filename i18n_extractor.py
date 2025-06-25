@@ -90,6 +90,7 @@ class JavaStringExtractor:
         if context:
             log_method_patterns = [
                 r'log\.',  # log.info(), log.error() 等
+                r'Log\.',  # log.info(), log.error() 等
                 r'logger\.',  # logger.info(), logger.error() 等
                 r'Logger\.',  # Logger.getLogger() 等
                 r'LoggerFactory\.',  # LoggerFactory.getLogger() 等
@@ -98,6 +99,7 @@ class JavaStringExtractor:
                 r'\.warn\s*\(',  # .warn()
                 r'\.error\s*\(',  # .error()
                 r'\.trace\s*\(',  # .trace()
+                r'\.logProcessorLog\(',
                 r'System\.out\.print',  # System.out.print/println
                 r'System\.err\.print',  # System.err.print/println
                 r'printStackTrace',  # printStackTrace()
@@ -430,9 +432,19 @@ class JavaStringExtractor:
         all_strings = OrderedDict()  # 字符串 -> 文件路径的映射
         java_files = list(project_path.rglob('*.java'))
         
-        print(f"找到 {len(java_files)} 个Java文件")
-        
+        # 过滤掉测试目录中的文件
+        filtered_java_files = []
+        excluded_count = 0
         for java_file in java_files:
+            # 检查文件路径是否包含测试目录
+            if 'src\\test' in str(java_file) or 'src/test' in str(java_file):
+                excluded_count += 1
+                continue
+            filtered_java_files.append(java_file)
+        
+        print(f"找到 {len(java_files)} 个Java文件，排除 {excluded_count} 个测试文件，处理 {len(filtered_java_files)} 个文件")
+        
+        for java_file in filtered_java_files:
             # print(f"正在处理: {java_file}")
             file_strings = self.extract_strings_from_file(java_file)
             # 按扫描顺序添加字符串，自动去重，保留首次出现的文件路径
@@ -725,7 +737,7 @@ class JavaStringExtractor:
 
 def main():
     parser = argparse.ArgumentParser(description='Java Spring Boot项目国际化字符串提取工具')
-    parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity', help='Java项目目录路径')
+    parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity\\Common', help='Java项目目录路径')
     # parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity\\DataCenter\\dev\\datacenter\\datacenter-openservice', help='Java项目目录路径')
     parser.add_argument('--config_file', default='D:\\Downloads\\messages_no_log.properties', help='多语言配置文件路径')
     parser.add_argument('--encoding', default='utf-8', help='文件编码 (默认: utf-8)')
