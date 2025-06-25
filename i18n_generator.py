@@ -276,13 +276,32 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
     
     try:
         for key, source_value in source_properties:
+            need_regenerate = False
+            
             if key in existing_target_properties:
-                # 使用现有的翻译
-                target_value = existing_target_properties[key]
-                # print(f"保留现有翻译: {key} = {target_value}")
+                # 检查现有翻译的占位符数量
+                existing_value = existing_target_properties[key]
+                if validate_placeholder_count(source_value, existing_value):
+                    # 占位符数量匹配，使用现有翻译
+                    target_value = existing_value
+                    # print(f"保留现有翻译: {key} = {target_value}")
+                else:
+                    # 占位符数量不匹配，需要重新生成
+                    source_placeholders = count_placeholders(source_value)
+                    existing_placeholders = count_placeholders(existing_value)
+                    print(f"检测到现有翻译占位符不匹配: {key}")
+                    print(f"  原文占位符数量: {source_placeholders}, 现有翻译占位符数量: {existing_placeholders}")
+                    print(f"  将重新生成该项翻译...")
+                    need_regenerate = True
+                    added_count += 1
             else:
+                # 没有现有翻译，需要生成新的
+                need_regenerate = True
+                added_count += 1
+            
+            if need_regenerate:
                 # 生成新的翻译
-                max_retries = 5
+                max_retries = 3
                 retry_count = 0
                 target_value = None
                 
@@ -311,8 +330,6 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
                                 'translated_placeholders': translated_placeholders
                             })
                             break
-                
-                added_count += 1
                 
             new_target_properties.append((key, target_value))
             current_properties = new_target_properties.copy()
