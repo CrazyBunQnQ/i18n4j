@@ -301,7 +301,7 @@ def generate_language_properties(source_file: str, target_file: str, target_lang
             
             if need_regenerate:
                 # 生成新的翻译
-                max_retries = 3
+                max_retries = 5
                 retry_count = 0
                 target_value = None
                 
