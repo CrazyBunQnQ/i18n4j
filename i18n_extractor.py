@@ -571,7 +571,8 @@ class JavaStringExtractor:
             existing_keys = set()
         if existing_config is None:
             existing_config = {}
-            
+        
+        string_value = string_value.strip()
         # 检查键值是否已存在，如果存在则返回现有的键名
         for existing_key, existing_value in existing_config.items():
             if existing_value == string_value:
