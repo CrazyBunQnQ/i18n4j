@@ -159,15 +159,15 @@ class JavaStringExtractor:
         concatenation_patterns = [
             # "字符串" + 变量 + "字符串" 模式
             (r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*\+\s*([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*"([^"\\]*(?:\\.[^"\\]*)*)"', 
-             lambda m: f"{m.group(1)}{{}}{m.group(3)}"),
+             lambda m: f"{m.group(1)}{{0}}{m.group(3)}"),
             
             # "字符串" + 变量 模式
             (r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*\+\s*([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)', 
-             lambda m: f"{m.group(1)}{{}}"),
+             lambda m: f"{m.group(1)}{{0}}"),
             
             # 变量 + "字符串" 模式
             (r'([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*"([^"\\]*(?:\\.[^"\\]*)*)"', 
-             lambda m: f"{{}}{m.group(2)}"),
+             lambda m: f"{{0}}{m.group(2)}"),
         ]
         
         # 按行处理字符串拼接
@@ -253,7 +253,7 @@ class JavaStringExtractor:
                         # 检查是否为变量 + 
                         var_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?)\s*\+\s*$', next_line)
                         if var_match:
-                            concatenation_parts.append('{}')
+                            concatenation_parts.append('{0}')
                             j += 1
                             continue
                         
@@ -291,16 +291,18 @@ class JavaStringExtractor:
             return ""
         
         merged_parts = []
+        placeholder_index = 0
         i = 0
         while i < len(parts):
-            if parts[i] == '{}':
-                merged_parts.append('{}')
+            if parts[i] == '{0}':
+                merged_parts.append(f'{{{placeholder_index}}}')
+                placeholder_index += 1
                 i += 1
             else:
                 # 收集连续的字符串字面量
                 literal_part = parts[i]
                 i += 1
-                while i < len(parts) and parts[i] != '{}':
+                while i < len(parts) and parts[i] != '{0}':
                     literal_part += parts[i]
                     i += 1
                 merged_parts.append(literal_part)
@@ -345,7 +347,7 @@ class JavaStringExtractor:
                 append_parts.append(string_content)
             else:
                 # 变量或表达式，用占位符表示
-                append_parts.append('{}')
+                append_parts.append('{0}')
         
         return append_parts
     
@@ -356,16 +358,18 @@ class JavaStringExtractor:
         
         # 合并连续的字符串字面量
         merged_parts = []
+        placeholder_index = 0
         i = 0
         while i < len(append_parts):
-            if append_parts[i] == '{}':
-                merged_parts.append('{}')
+            if append_parts[i] == '{0}':
+                merged_parts.append(f'{{{placeholder_index}}}')
+                placeholder_index += 1
                 i += 1
             else:
                 # 收集连续的字符串字面量
                 literal_part = append_parts[i]
                 i += 1
-                while i < len(append_parts) and append_parts[i] != '{}':
+                while i < len(append_parts) and append_parts[i] != '{0}':
                     literal_part += append_parts[i]
                     i += 1
                 merged_parts.append(literal_part)
