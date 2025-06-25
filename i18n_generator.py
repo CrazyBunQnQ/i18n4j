@@ -10,6 +10,7 @@ import os
 import re
 import json
 import requests
+import argparse
 from typing import Dict, List, Tuple
 from dotenv import load_dotenv
 
@@ -55,15 +56,16 @@ def parse_properties_file(file_path: str) -> List[Tuple[str, str]]:
                 
     return properties
 
-def translate_text(chinese_text: str) -> str:
+def translate_text(source_text: str, target_language: str = 'en') -> str:
     """
-    使用AI模型翻译中文文本为英文
+    使用AI模型翻译文本到目标语言
     
     Args:
-        chinese_text: 中文文本
+        source_text: 源文本
+        target_language: 目标语言代码 (如: en, fr, de, ja, ko 等)
         
     Returns:
-        str: 英文翻译
+        str: 翻译结果
     """
     if not OPENAI_API_KEY:
         print("错误: 未设置OPENAI_API_KEY，无法进行翻译")
@@ -76,14 +78,30 @@ def translate_text(chinese_text: str) -> str:
             'Content-Type': 'application/json'
         }
         
+        # 语言映射
+        language_names = {
+            'en': '英文',
+            'fr': '法文', 
+            'de': '德文',
+            'ja': '日文',
+            'ko': '韩文',
+            'es': '西班牙文',
+            'it': '意大利文',
+            'pt': '葡萄牙文',
+            'ru': '俄文',
+            'ar': '阿拉伯文'
+        }
+        
+        target_lang_name = language_names.get(target_language, f'{target_language}语')
+        
         # 构建提示词
-        prompt = f"""请将以下中文文本翻译成英文，要求：
+        prompt = f"""请将以下文本翻译成{target_lang_name}，要求：
 1. 翻译要准确、自然
 2. 适合用于软件界面的国际化
 3. 只返回翻译结果，不要其他内容
 
-中文文本：{chinese_text}
-英文翻译："""
+原文：{source_text}
+{target_lang_name}翻译："""
         
         data = {
             'model': MODEL_NAME,
@@ -111,87 +129,155 @@ def translate_text(chinese_text: str) -> str:
             elif translation.startswith('Translation:'):
                 translation = translation[12:].strip()
             
-            print(f"AI翻译: {chinese_text} -> {translation}")
+            print(f"AI翻译: {source_text} -> {translation}")
             return translation
         else:
             print(f"API请求失败: {response.status_code} - {response.text}")
-            return chinese_text
+            return source_text
             
     except Exception as e:
         print(f"翻译API调用出错: {e}")
-        return chinese_text
+        return source_text
 
-def generate_english_properties(chinese_file: str, english_file: str) -> None:
+def generate_language_properties(source_file: str, target_file: str, target_language: str) -> None:
     """
-    根据中文配置文件生成英文配置文件
+    根据源配置文件生成目标语言配置文件
     
     Args:
-        chinese_file: 中文配置文件路径
-        english_file: 英文配置文件路径
+        source_file: 源配置文件路径
+        target_file: 目标配置文件路径
+        target_language: 目标语言代码
     """
-    print(f"正在处理中文配置文件: {chinese_file}")
+    print(f"正在处理源配置文件: {source_file}")
     
-    # 解析中文配置文件
-    chinese_properties = parse_properties_file(chinese_file)
-    if not chinese_properties:
-        print("错误: 中文配置文件为空或不存在")
+    # 解析源配置文件
+    source_properties = parse_properties_file(source_file)
+    if not source_properties:
+        print("错误: 源配置文件为空或不存在")
         return
         
-    print(f"找到 {len(chinese_properties)} 个中文配置项")
+    print(f"找到 {len(source_properties)} 个配置项")
     
-    # 解析现有的英文配置文件
-    existing_english_properties = {}
-    if os.path.exists(english_file):
-        print(f"发现现有英文配置文件: {english_file}")
-        english_props = parse_properties_file(english_file)
-        existing_english_properties = {key: value for key, value in english_props}
-        print(f"现有英文配置项: {len(existing_english_properties)} 个")
+    # 解析现有的目标语言配置文件
+    existing_target_properties = {}
+    if os.path.exists(target_file):
+        print(f"发现现有目标配置文件: {target_file}")
+        target_props = parse_properties_file(target_file)
+        existing_target_properties = {key: value for key, value in target_props}
+        print(f"现有目标配置项: {len(existing_target_properties)} 个")
     
-    # 生成新的英文配置文件内容
-    new_english_properties = []
+    # 生成新的目标语言配置文件内容
+    new_target_properties = []
     added_count = 0
     
-    for key, chinese_value in chinese_properties:
-        if key in existing_english_properties:
-            # 使用现有的英文翻译
-            english_value = existing_english_properties[key]
-            print(f"保留现有翻译: {key} = {english_value}")
+    for key, source_value in source_properties:
+        if key in existing_target_properties:
+            # 使用现有的翻译
+            target_value = existing_target_properties[key]
+            print(f"保留现有翻译: {key} = {target_value}")
         else:
-            # 生成新的英文翻译
-            english_value = translate_text(chinese_value)
-            print(f"新增翻译: {key} = {english_value}")
+            # 生成新的翻译
+            target_value = translate_text(source_value, target_language)
+            print(f"新增翻译: {key} = {target_value}")
             added_count += 1
             
-        new_english_properties.append((key, english_value))
+        new_target_properties.append((key, target_value))
     
-    # 写入英文配置文件
-    with open(english_file, 'w', encoding='utf-8') as f:
-        for key, value in new_english_properties:
+    # 写入目标语言配置文件
+    with open(target_file, 'w', encoding='utf-8') as f:
+        for key, value in new_target_properties:
             f.write(f"{key}={value}\n")
     
     print(f"\n生成完成!")
-    print(f"总配置项: {len(new_english_properties)}")
+    print(f"总配置项: {len(new_target_properties)}")
     print(f"新增配置项: {added_count}")
-    print(f"英文配置文件已保存到: {english_file}")
+    print(f"目标配置文件已保存到: {target_file}")
+
+def parse_arguments():
+    """
+    解析命令行参数
+    """
+    parser = argparse.ArgumentParser(
+        description='Java i18n 多语言配置文件生成器',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""示例用法:
+  %(prog)s                                    # 使用默认参数
+  %(prog)s -s config.properties               # 指定源文件
+  %(prog)s -l en fr de                        # 生成英文、法文、德文配置
+  %(prog)s -s app.properties -l en ja ko      # 指定源文件并生成多语言配置
+        """
+    )
+    
+    parser.add_argument(
+        '-s', '--source',
+        default='messages.properties',
+        help='源配置文件路径 (默认: messages.properties)'
+    )
+    
+    parser.add_argument(
+        '-l', '--languages',
+        nargs='+',
+        default=['en', 'ja'],
+        help='目标语言列表 (默认: en)，支持: en, fr, de, ja, ko, es, it, pt, ru, ar 等'
+    )
+    
+    return parser.parse_args()
 
 def main():
     """
     主函数
     """
-    # 配置文件路径
-    chinese_file = "d:/Documents/MEGA/Scripts/python/i18n4j/test_messages.properties"
-    english_file = "d:/Documents/MEGA/Scripts/python/i18n4j/test_messages_en.properties"
+    args = parse_arguments()
     
     print("Java i18n 多语言配置文件生成器")
     print("=" * 50)
+    print(f"源文件: {args.source}")
+    print(f"目标语言: {', '.join(args.languages)}")
+    print("=" * 50)
+    
+    # 检查源文件是否存在
+    if not os.path.exists(args.source):
+        print(f"错误: 源文件 '{args.source}' 不存在")
+        return 1
+    
+    # 获取源文件的目录和基础名称
+    source_dir = os.path.dirname(args.source)
+    source_name = os.path.basename(args.source)
+    
+    # 移除扩展名
+    if source_name.endswith('.properties'):
+        base_name = source_name[:-11]  # 移除 '.properties'
+    else:
+        base_name = source_name
+    
+    success_count = 0
+    total_count = len(args.languages)
     
     try:
-        generate_english_properties(chinese_file, english_file)
+        for language in args.languages:
+            print(f"\n正在生成 {language} 语言配置...")
+            
+            # 构建目标文件路径
+            target_filename = f"{base_name}_{language}.properties"
+            if source_dir:
+                target_file = os.path.join(source_dir, target_filename)
+            else:
+                target_file = target_filename
+            
+            try:
+                generate_language_properties(args.source, target_file, language)
+                success_count += 1
+            except Exception as e:
+                print(f"生成 {language} 配置时出错: {e}")
+                
+        print(f"\n=" * 50)
+        print(f"任务完成! 成功生成 {success_count}/{total_count} 个语言配置文件")
+        
     except Exception as e:
-        print(f"错误: {e}")
+        print(f"程序执行出错: {e}")
         return 1
         
-    return 0
+    return 0 if success_count == total_count else 1
 
 if __name__ == "__main__":
     exit(main())
