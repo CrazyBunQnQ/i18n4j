@@ -746,9 +746,9 @@ class JavaStringExtractor:
 
 def main():
     parser = argparse.ArgumentParser(description='Java Spring Boot项目国际化字符串提取工具')
-    parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity\\Common', help='Java项目目录路径')
+    parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity', help='Java项目目录路径')
     # parser.add_argument('--project_dir', default='E:\\LaProjects\\2.15\\Singularity\\DataCenter\\dev\\datacenter\\datacenter-openservice', help='Java项目目录路径')
-    parser.add_argument('--config_file', default='D:\\Downloads\\messages_no_log.properties', help='多语言配置文件路径')
+    parser.add_argument('--config_file', default='D:\\Downloads\\messages.properties', help='多语言配置文件路径')
     parser.add_argument('--encoding', default='utf-8', help='文件编码 (默认: utf-8)')
     parser.add_argument('--ignore-log-strings', action='store_true', default=True, help='是否忽略日志中的字符串 (默认: True)')
     parser.add_argument('--include-log-strings', action='store_true', help='包含日志中的字符串 (覆盖 --ignore-log-strings)')

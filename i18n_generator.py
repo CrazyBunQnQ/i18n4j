@@ -451,7 +451,7 @@ def main():
             except Exception as e:
                 print(f"生成 {language} 配置时出错: {e}")
                 
-        print(f"\n=" * 50)
+        print(f"\n===========")
         print(f"任务完成! 成功生成 {success_count}/{total_count} 个语言配置文件")
         
     except Exception as e:
