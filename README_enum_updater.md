@@ -1,17 +1,34 @@
-# Java枚举国际化Key添加工具
+# Java枚举国际化Key添加工具（优化版）
 
 这个工具用于自动为Java枚举类添加国际化key，从properties文件中查找对应的翻译key并添加到枚举项中。
 
-## 功能说明
+## 🆕 优化功能
 
-将Java枚举项从：
+### 智能字段识别
+- **自动检测name字段位置**：支持不同枚举类中name字段在不同位置
+- **中文字段优先**：优先识别包含中文的字段作为name字段
+- **灵活参数解析**：支持复杂的参数结构和嵌套引号
+
+### 支持多种枚举格式
+
+**格式1：name字段在第1位**
 ```java
-ONLINE("在线", ...)
+ONLINE("在线", 1, true)
+// 更新为
+ONLINE("在线", "common.status.online", 1, true)
 ```
 
-自动更新为：
+**格式2：name字段在第4位**
 ```java
-ONLINE("在线", "common.common-facade.online", ...)
+URL(1, "url", "url", "访问数")
+// 更新为
+URL(1, "url", "url", "访问数", "http.statistic.url")
+```
+
+**格式3：复杂参数结构**
+```java
+STATUS("ACTIVE", StatusType.NORMAL, "激活状态", true)
+// 自动识别"激活状态"为name字段
 ```
 
 ## 文件说明
@@ -54,12 +71,28 @@ python enum_updater_simple.py <java文件路径> <properties文件路径>
 python enum_updater_simple.py Dictionary.java messages.properties
 ```
 
+## 转换示例
+
+**原始枚举项：**
+```java
+ONLINE("在线", 1),
+OFFLINE("离线", 0),
+HOST(7, "host", "host", "host"),
+```
+
+**转换后：**
+```java
+ONLINE("在线", 1, "common.common-facade.online"),
+OFFLINE("离线", 0, "common.common-facade.offline"),
+HOST(7, "host", "host", "host", "http.statistic.host"),
+```
+
 ## 处理逻辑
 
 1. **读取properties文件**：解析所有key-value对
 2. **解析Java枚举**：提取每个枚举项的name值
 3. **匹配查找**：在properties中查找value等于枚举name的key
-4. **更新枚举**：将找到的key添加到枚举项的第二个参数位置
+4. **更新枚举**：将找到的key作为新字段添加到枚举项的最后
 5. **备份原文件**：自动创建.backup备份文件
 6. **写入更新**：保存修改后的Java文件
 
@@ -144,3 +177,38 @@ Java枚举类国际化key添加工具
 1. 先用小的测试文件验证功能
 2. 检查备份文件确认原文件安全
 3. 逐步处理，避免一次性处理大量文件
+
+## 新功能特性（v2.1）
+
+### 新字段添加模式
+
+从v2.1版本开始，脚本采用**新字段添加模式**，具有以下特点：
+
+- **非侵入式添加**：在枚举项最后添加新字段，不修改现有参数
+- **保持原有结构**：完全保留原始枚举项的参数顺序和格式
+- **扩展性友好**：添加的国际化key作为独立字段，便于后续使用
+
+### 对比说明
+
+**旧版本（替换模式）**：
+```java
+// 原始
+HOST(7, "host", "host", "host")
+// 修改后（在name字段后插入）
+HOST(7, "host", "http.statistic.host", "host", "host")
+```
+
+**新版本（追加模式）**：
+```java
+// 原始
+HOST(7, "host", "host", "host")
+// 修改后（在最后添加新字段）
+HOST(7, "host", "host", "host", "http.statistic.host")
+```
+
+### 优势
+
+1. **向后兼容**：不破坏现有的枚举结构
+2. **易于理解**：新字段明确表示国际化key
+3. **便于维护**：原有逻辑不受影响
+4. **灵活扩展**：可以继续添加更多字段
