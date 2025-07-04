@@ -22,7 +22,7 @@ load_dotenv()
 # 从环境变量获取API配置
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 OPENAI_API_BASE_URL = os.getenv('OPENAI_API_BASE_URL', 'https://api.openai.com')
-MODEL_NAME = 'gemma3:12b'
+MODEL_NAME = 'qwen3:14b'
 
 
 def count_placeholders(text: str) -> int:
@@ -130,8 +130,9 @@ def translate_property_line(key: str, source_value: str, target_language: str = 
         # 构建完整的配置行
         source_line = f"{key}={source_value}"
         
-        # 构建提示词
-        prompt = f"""根据中文的 i18n 多语言配置 properties：
+        # 构建提示词 qwen3 模型需要关闭思考
+        # prompt = f"""根据中文的 i18n 多语言配置 properties：
+        prompt = f"""/no_think 根据中文的 i18n 多语言配置 properties：
 `{source_line}`
 
 生成对应的 _{target_language} 配置，要求：
@@ -162,6 +163,13 @@ def translate_property_line(key: str, source_value: str, target_language: str = 
         if response.status_code == 200:
             result = response.json()
             translation = result['choices'][0]['message']['content'].strip()
+            # 如果结果中包含 <think> 标签
+            # 则使用正则移除 <think>...</think> 标签及其中的内容
+            if "<think>" in translation:
+                # print(f"原始AI键名: {translation}")
+                # 正则移除 <think>...</think> 标签及其中的内容
+                translation = re.sub(r'<think>[.\s]*?</think>', '', translation).strip()
+                # print(f"移除标签后的AI键名: {translation}")
             
             # 清理翻译结果，移除可能的前缀和后缀
             # 移除常见的前缀
